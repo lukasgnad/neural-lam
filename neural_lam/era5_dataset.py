@@ -22,6 +22,7 @@ class ERA5Dataset(torch.utils.data.Dataset):
         split="train",
         standardize=True,
         expanded_test=False,
+        dataset_path="data",
         **kwarg,  # pylint: disable=unused-argument
     ):
         super().__init__()
@@ -29,9 +30,9 @@ class ERA5Dataset(torch.utils.data.Dataset):
         assert split in ("train", "val", "test"), "Unknown dataset split"
 
         # Open xarrays
-        fields_path = os.path.join("data", dataset_name, "fields.zarr")
+        fields_path = os.path.join(dataset_path, dataset_name, "fields.zarr")
         fields_xds = xa.open_zarr(fields_path)
-        forcing_path = os.path.join("data", dataset_name, "forcing.zarr")
+        forcing_path = os.path.join(dataset_path, dataset_name, "forcing.zarr")
         forcing_xda = xa.open_dataarray(forcing_path, engine="zarr")
         # each with dims (num_time, num_lon, num_lat)
 
@@ -42,6 +43,14 @@ class ERA5Dataset(torch.utils.data.Dataset):
                 "train": slice("1959-01-01T12", "1959-01-03T12"),  # 3 days
                 "val": slice("1959-01-03T18", "1959-01-04T18"),  # 1 day
                 "test": slice("1959-01-03T18", "1959-01-04T18"),  # Same as val
+            }
+        elif "train001" in dataset_name:
+            # Example subset, create some example split
+            print("Splitting for train001...")
+            split_slices = {
+                "train": slice("2019-01-01T12", "2019-09-30T12"),  # 3 days
+                "val": slice("2019-10-01T12", "2019-10-31T12"),  # 1 day
+                "test": slice("2019-11-01T12", "2019-12-31T18"),  # Same as val
             }
         else:
             # Actual dataset
@@ -65,6 +74,7 @@ class ERA5Dataset(torch.utils.data.Dataset):
         # Compute dataset length
         timesteps_in_split = len(fields_ds_split.coords["time"])
         self.pred_length = pred_length
+        
         # -1 for AR-2, - pred_length for target states
         ds_timesteps = timesteps_in_split - 1 - pred_length
         assert ds_timesteps > 0, "Dataset too small for given pred_length"
@@ -80,7 +90,7 @@ class ERA5Dataset(torch.utils.data.Dataset):
         # Set up for standardization
         self.standardize = standardize
         if standardize:
-            ds_stats = utils.load_dataset_stats(dataset_name, "cpu")
+            ds_stats = utils.load_dataset_stats(dataset_name, dataset_path, "cpu")
 
             # These are torch arrays
             self.data_mean = ds_stats["data_mean"]

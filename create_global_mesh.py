@@ -24,6 +24,14 @@ GC_SPATIAL_FEATURES_KWARGS = {
     "relative_latitude_local_coordinates": True,
 }
 
+DEFAULT_DATASET="global_example_era5"
+DEFAULT_GRAPH = "global_multiscale"
+DEFAULT_PLOT = 0
+DEFAULT_SPLITS = 3
+DEFAULT_LEVELS = None
+DEFAULT_HIERARCHICAL = 0
+DEFAULT_DATASET_PATH = "data"
+
 
 def vertice_cart_to_lat_lon(vertices):
     """
@@ -124,54 +132,11 @@ def inter_mesh_connection(from_mesh, to_mesh):
     )  # (2, M)
     return edge_index
 
-
-def main():
-    """
-    Global graph generation
-    """
-    parser = ArgumentParser(description="Graph generation arguments")
-    parser.add_argument(
-        "--dataset",
-        type=str,
-        default="global_example_era5",
-        help="Dataset to load grid point coordinates from "
-        "(default: global_example_era5)",
-    )
-    parser.add_argument(
-        "--graph",
-        type=str,
-        default="global_multiscale",
-        help="Name to save graph as (default: global_multiscale)",
-    )
-    parser.add_argument(
-        "--plot",
-        type=int,
-        default=0,
-        help="If graphs should be plotted during generation "
-        "(default: 0 (false))",
-    )
-    parser.add_argument(
-        "--splits",
-        default=3,
-        type=int,
-        help="Number of splits to triangular mesh (default: 3)",
-    )
-    parser.add_argument(
-        "--levels",
-        type=int,
-        help="Number of levels to keep, from finest upwards "
-        "(default: None (keep all))",
-    )
-    parser.add_argument(
-        "--hierarchical",
-        type=int,
-        default=0,
-        help="Generate hierarchical mesh graph (default: 0, no)",
-    )
-    args = parser.parse_args()
-
-    fields_group_path = os.path.join("data", args.dataset, "fields.zarr")
-    graph_dir_path = os.path.join("graphs", args.graph)
+def create_global_mesh(dataset:str=DEFAULT_DATASET, graph:str=DEFAULT_GRAPH, plot:int=DEFAULT_PLOT,
+                       splits:int=DEFAULT_SPLITS, levels:int=DEFAULT_LEVELS, hierarchical:int=DEFAULT_HIERARCHICAL,
+                       dataset_path:str=DEFAULT_DATASET_PATH):
+    fields_group_path = os.path.join(dataset_path, dataset, "fields.zarr")
+    graph_dir_path = os.path.join("graphs", graph)
     os.makedirs(graph_dir_path, exist_ok=True)
 
     # Load grid positions
@@ -207,14 +172,14 @@ def main():
     )
 
     # Mesh, index 0 is initial graph, with longest edges
-    mesh_list = gc_im.get_hierarchy_of_triangular_meshes_for_sphere(args.splits)
-    if args.levels is not None:
+    mesh_list = gc_im.get_hierarchy_of_triangular_meshes_for_sphere(splits)
+    if levels is not None:
         assert (
-            args.levels <= args.splits + 1
-        ), f"Can not keep {args.levels} levels when doing {args.splits} splits"
-        mesh_list = mesh_list[-args.levels :]
+            levels <= splits + 1
+        ), f"Can not keep {levels} levels when doing {splits} splits"
+        mesh_list = mesh_list[-levels :]
 
-    if args.hierarchical:
+    if hierarchical:
         mesh_list_rev = list(reversed(mesh_list))  # 0 is finest graph now
         m2m_graphs = mesh_list_rev  # list of num_splitgraphs
 
@@ -369,7 +334,7 @@ def main():
         os.path.join(graph_dir_path, "mesh_lat_lon.pt"),
     )
 
-    if args.plot:
+    if plot:
         for level_i, (m2m_edge_index, mesh_lat_lon) in enumerate(
             zip(m2m_edge_index_torch, mesh_lat_lon_torch)
         ):
@@ -466,6 +431,62 @@ def main():
         f"connected to {num_mesh_nodes}"
     )
     print(f"#grid / #mesh = {num_grid_nodes/num_mesh_nodes :.2f}")
+
+
+
+def main():
+    """
+    Global graph generation
+    """
+    parser = ArgumentParser(description="Graph generation arguments")
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        default=DEFAULT_DATASET,
+        help="Dataset to load grid point coordinates from "
+        "(default: global_example_era5)",
+    )
+    parser.add_argument(
+        "--graph",
+        type=str,
+        default=DEFAULT_GRAPH,
+        help="Name to save graph as (default: global_multiscale)",
+    )
+    parser.add_argument(
+        "--plot",
+        type=int,
+        default=DEFAULT_PLOT,
+        help="If graphs should be plotted during generation "
+        "(default: 0 (false))",
+    )
+    parser.add_argument(
+        "--splits",
+        default=DEFAULT_SPLITS,
+        type=int,
+        help="Number of splits to triangular mesh (default: 3)",
+    )
+    parser.add_argument(
+        "--levels",
+        type=int,
+        default=DEFAULT_LEVELS,
+        help="Number of levels to keep, from finest upwards "
+        "(default: None (keep all))",
+    )
+    parser.add_argument(
+        "--hierarchical",
+        type=int,
+        default=DEFAULT_HIERARCHICAL,
+        help="Generate hierarchical mesh graph (default: 0, no)",
+    )
+    parser.add_argument(
+        "--dataset_path",
+        type=str,
+        default=DEFAULT_DATASET_PATH,
+        help="The path to the folder containing the dataset (default \'data\')",
+    )
+    args = parser.parse_args()
+    create_global_mesh(args.dataset, args.graph, args.plot, args.splits, args.levels, args.hierarchical, args.dataset_path)
+    
 
 
 if __name__ == "__main__":

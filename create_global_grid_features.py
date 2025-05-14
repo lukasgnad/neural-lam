@@ -19,29 +19,15 @@ FIELD_NAMES = (
     "land-sea-mask",
 )
 
+DEFAULT_DATASET="global_example_era5"
+DEFAULT_DATASET_PATH = "data"
+DEFAULT_PLOT = 0
 
-def main():
-    """
-    Pre-compute all static features related to the grid nodes
-    """
-    parser = ArgumentParser(description="Training arguments")
-    parser.add_argument(
-        "--dataset",
-        type=str,
-        default="global_example_era5",
-        help="Dataset to create grid features for "
-        "(default: global_example_era5)",
-    )
-    parser.add_argument(
-        "--plot",
-        type=int,
-        default=0,
-        help="If fields should be plotted " "(default: 0 (false))",
-    )
-    args = parser.parse_args()
-
-    static_dir_path = os.path.join("data", args.dataset, "static")
-    fields_group_path = os.path.join("data", args.dataset, "fields.zarr")
+def create_global_grid_features(dataset:str=DEFAULT_DATASET, plot:int=DEFAULT_PLOT, dataset_path:str=DEFAULT_DATASET_PATH):
+    static_dir_path = os.path.join(dataset_path, dataset, "static")
+    if not os.path.exists(static_dir_path):
+        os.makedirs(static_dir_path)
+    fields_group_path = os.path.join(dataset_path, dataset, "fields.zarr")
     fields_group = zarr.open(fields_group_path, mode="r")
 
     grid_features_list = []  # Each (num_lon, num_lat) numpy array
@@ -95,12 +81,41 @@ def main():
     )  # Flatten first two dims, (num_grid_nodes,num_features, )
     grid_features = torch.tensor(grid_features_np, dtype=torch.float32)
 
-    if args.plot:
+    if plot:
         for feature, field_name in zip(grid_features.T, FIELD_NAMES):
             vis.plot_prediction(feature, feature, title=field_name)
             plt.show()
 
     torch.save(grid_features, os.path.join(static_dir_path, "grid_features.pt"))
+
+def main():
+    """
+    Pre-compute all static features related to the grid nodes
+    """
+    parser = ArgumentParser(description="Training arguments")
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        default=DEFAULT_DATASET,
+        help="Dataset to create grid features for "
+        "(default: global_example_era5)",
+    )
+    parser.add_argument(
+        "--plot",
+        type=int,
+        default=DEFAULT_PLOT,
+        help="If fields should be plotted " "(default: 0 (false))",
+    )
+    parser.add_argument(
+        "--dataset_path",
+        type=str,
+        default=DEFAULT_DATASET_PATH,
+        help="The path to the folder containing the dataset (default \'data\')",
+    )
+    args = parser.parse_args()
+    create_global_grid_features(args.dataset, args.plot, args.dataset_path)
+
+    
 
 
 if __name__ == "__main__":

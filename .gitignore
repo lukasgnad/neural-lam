@@ -8,6 +8,8 @@ graphs
 sweeps
 test_*.sh
 saved_forecasts
+paper_checkpoints/
+out/
 
 ### Python ###
 # Byte-compiled / optimized / DLL files

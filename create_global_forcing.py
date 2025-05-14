@@ -13,6 +13,9 @@ import xarray as xa
 # First-party
 from neural_lam import vis
 
+DEFAULT_DATASET="global_example_era5"
+DEFAULT_DATASET_PATH = "data"
+DEFAULT_PLOT = 0
 
 def progress_to_sin_cos(progress):
     """
@@ -23,28 +26,10 @@ def progress_to_sin_cos(progress):
     return prog_sin, prog_cos
 
 
-def main():
-    """
-    Pre-compute all static features related to the grid nodes
-    """
-    parser = ArgumentParser(description="Training arguments")
-    parser.add_argument(
-        "--dataset",
-        type=str,
-        default="global_example_era5",
-        help="Dataset to compute weights for (default: meps_example)",
-    )
-    parser.add_argument(
-        "--plot",
-        type=int,
-        default=0,
-        help="If fields should be plotted " "(default: 0 (false))",
-    )
-    args = parser.parse_args()
-
-    fields_group_path = os.path.join("data", args.dataset, "fields.zarr")
+def create_global_forcing(dataset:str=DEFAULT_DATASET, plot:int=DEFAULT_PLOT, dataset_path:str=DEFAULT_DATASET_PATH):
+    fields_group_path = os.path.join(dataset_path, dataset, "fields.zarr")
     fields_group = xa.open_zarr(fields_group_path)
-    forcing_path = os.path.join("data", args.dataset, "forcing.zarr")
+    forcing_path = os.path.join(dataset_path, dataset, "forcing.zarr")
 
     # Lat-lon
     grid_lat_vals = np.array(
@@ -125,7 +110,7 @@ def main():
     xa_da.to_zarr(forcing_path, mode="w")
     print("Done!")
 
-    if args.plot:
+    if plot:
         # (num_vars, num_time, num_lon, num_lat)
         for time_i, timestamp in enumerate(timestamps):
             time_slice = xa_da.isel(time=time_i)  # (num_lon, num_lat, num_vars)
@@ -141,6 +126,34 @@ def main():
                     title=f"{timestamp} UTC, {var_name}",
                 )
                 plt.show()
+
+def main():
+    """
+    Pre-compute all static features related to the grid nodes
+    """
+    parser = ArgumentParser(description="Training arguments")
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        default=DEFAULT_DATASET,
+        help="Dataset to create grid features for "
+        "(default: global_example_era5)",
+    )
+    parser.add_argument(
+        "--plot",
+        type=int,
+        default=DEFAULT_PLOT,
+        help="If fields should be plotted " "(default: 0 (false))",
+    )
+    parser.add_argument(
+        "--dataset_path",
+        type=str,
+        default=DEFAULT_DATASET_PATH,
+        help="The path to the folder containing the dataset (default \'data\')",
+    )
+    args = parser.parse_args()
+    create_global_forcing(args.dataset, args.plot, args.dataset_path)
+
 
 
 if __name__ == "__main__":

@@ -14,41 +14,19 @@ from neural_lam import constants
 from neural_lam.era5_dataset import ERA5Dataset
 from neural_lam.weather_dataset import WeatherDataset
 
+DEFAULT_DATASET= "meps_example",
+DEFAULT_BATCH_SIZE=32,
+DEFAULT_STEP_LENGTH =3,
+DEFAULT_N_WORKERS=4,
+DEFAULT_DATASET_PATH="data",
 
-def main():
-    """
-    Pre-compute parameter weights to be used in loss function
-    """
-    parser = ArgumentParser(description="Training arguments")
-    parser.add_argument(
-        "--dataset",
-        type=str,
-        default="meps_example",
-        help="Dataset to compute weights for (default: meps_example)",
-    )
-    parser.add_argument(
-        "--batch_size",
-        type=int,
-        default=32,
-        help="Batch size when iterating over the dataset",
-    )
-    parser.add_argument(
-        "--step_length",
-        type=int,
-        default=3,
-        help="Step length in hours to consider single time step (for LAM only)"
-        " (default: 3)",
-    )
-    parser.add_argument(
-        "--n_workers",
-        type=int,
-        default=4,
-        help="Number of workers in data loader (default: 4)",
-    )
-    args = parser.parse_args()
-
-    static_dir_path = os.path.join("data", args.dataset, "static")
-    global_ds = "global" in args.dataset
+def create_parameter_weights(dataset:str=DEFAULT_DATASET, batch_size:int=DEFAULT_BATCH_SIZE,
+                             step_length:int=DEFAULT_STEP_LENGTH, n_workers:int=DEFAULT_N_WORKERS,
+                             dataset_path:str=DEFAULT_DATASET_PATH):
+    static_dir_path = os.path.join(dataset_path, dataset, "static")
+    if not os.path.exists(static_dir_path):
+        os.makedirs(static_dir_path)
+    global_ds = "global" in dataset
 
     if global_ds:
         # Follow approach of GraphCast, giving vertical levels weight
@@ -71,7 +49,7 @@ def main():
         # (num_variables,)
 
         # Compute spatial weighting for grid nodes
-        fields_group_path = os.path.join("data", args.dataset, "fields.zarr")
+        fields_group_path = os.path.join(dataset_path, dataset, "fields.zarr")
         xds = xa.open_zarr(fields_group_path)
         # Hack since GC code uses "lat" for some reason
         xds = xds.assign_coords({"lat": xds.coords["latitude"]})
@@ -110,21 +88,22 @@ def main():
     # Load dataset without any subsampling
     if global_ds:
         ds = ERA5Dataset(
-            args.dataset,
+            dataset,
             split="train",
             pred_length=1,  # Use 1 to get each time step only once
             standardize=False,
+            dataset_path=dataset_path
         )
     else:
         ds = WeatherDataset(
-            args.dataset,
+            dataset,
             split="train",
             subsample_step=1,
             pred_length=63,
             standardize=False,
         )  # Without standardization
     loader = torch.utils.data.DataLoader(
-        ds, args.batch_size, shuffle=False, num_workers=args.n_workers
+        ds, batch_size, shuffle=False, num_workers=n_workers
     )
     # Compute mean and std.-dev. of each parameter (+ flux forcing)
     # across full dataset
@@ -171,22 +150,23 @@ def main():
     # Re-load dataset with standardization
     if global_ds:
         ds_standard = ERA5Dataset(
-            args.dataset,
+            dataset,
             split="train",
             pred_length=1,  # Use 1 to get each time step only once
             standardize=True,
+            dataset_path=dataset_path
         )
     else:
         ds_standard = WeatherDataset(
-            args.dataset,
+            dataset,
             split="train",
             subsample_step=1,
             pred_length=63,
             standardize=True,
         )
-        used_subsample_len = (65 // args.step_length) * args.step_length
+        used_subsample_len = (65 // step_length) * step_length
     loader_standard = torch.utils.data.DataLoader(
-        ds_standard, args.batch_size, shuffle=False, num_workers=args.n_workers
+        ds_standard, batch_size, shuffle=False, num_workers=n_workers
     )
 
     diff_means = []
@@ -203,13 +183,13 @@ def main():
             # Note: batch contains only 1h-steps
             stepped_batch = torch.cat(
                 [
-                    batch[:, ss_i : used_subsample_len : args.step_length]
-                    for ss_i in range(args.step_length)
+                    batch[:, ss_i : used_subsample_len : step_length]
+                    for ss_i in range(step_length)
                 ],
                 dim=0,
             )
             # (N_batch', N_t, N_grid, d_features),
-            # N_batch' = args.step_length*N_batch
+            # N_batch' = step_length*N_batch
 
         batch_diffs = stepped_batch[:, 1:] - stepped_batch[:, :-1]
         # (N_batch', N_t-1, N_grid, d_features)
@@ -228,6 +208,46 @@ def main():
     print("Saving one-step difference mean and std.-dev...")
     torch.save(diff_mean, os.path.join(static_dir_path, "diff_mean.pt"))
     torch.save(diff_std, os.path.join(static_dir_path, "diff_std.pt"))
+
+def main():
+    """
+    Pre-compute parameter weights to be used in loss function
+    """
+    parser = ArgumentParser(description="Training arguments")
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        default=DEFAULT_DATASET,
+        help="Dataset to compute weights for (default: meps_example)",
+    )
+    parser.add_argument(
+        "--batch_size",
+        type=int,
+        default=DEFAULT_BATCH_SIZE,
+        help="Batch size when iterating over the dataset",
+    )
+    parser.add_argument(
+        "--step_length",
+        type=int,
+        default=DEFAULT_STEP_LENGTH,
+        help="Step length in hours to consider single time step (for LAM only)"
+        " (default: 3)",
+    )
+    parser.add_argument(
+        "--n_workers",
+        type=int,
+        default=DEFAULT_N_WORKERS,
+        help="Number of workers in data loader (default: 4)",
+    )
+    parser.add_argument(
+        "--dataset_path",
+        type=str,
+        default=DEFAULT_DATASET_PATH,
+        help="The path to the folder containing the dataset (default \'data\')",
+    )
+    args = parser.parse_args()
+    create_parameter_weights(args.dataset, args.batch_size, args.step_length, args.n_workers, args.dataset_path)
+    
 
 
 if __name__ == "__main__":

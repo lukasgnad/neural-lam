@@ -41,6 +41,12 @@ def main():
         "(default: meps_example)",
     )
     parser.add_argument(
+        "--dataset_path",
+        type=str,
+        default="data",
+        help="The path to the folder containing the dataset (default \'data\')",
+    )
+    parser.add_argument(
         "--model",
         type=str,
         default="graph_lam",
@@ -284,6 +290,12 @@ def main():
         default=5,
         help="Number of ensemble members during evaluation (default: 5)",
     )
+    parser.add_argument(
+        "--name",
+        type=str,
+        default="",
+        help="Name for the stored model checkpoints",
+    )
     args = parser.parse_args()
 
     # Asserts for arguments
@@ -313,6 +325,7 @@ def main():
             pred_length=args.ar_steps,
             split="train",
             subsample_step=args.step_length,
+            dataset_path=args.dataset_path
         ),
         args.batch_size,
         shuffle=True,
@@ -324,6 +337,7 @@ def main():
             pred_length=args.eval_leads,
             split="val",
             subsample_step=args.step_length,
+            dataset_path=args.dataset_path
         ),
         args.batch_size,
         shuffle=False,
@@ -353,6 +367,8 @@ def main():
     prefix = ""
     if args.eval:
         prefix = f"eval-{args.eval}-"
+    if args.name:
+        prefix = f"{args.name}-{prefix}"
     run_name = (
         f"{prefix}{args.model}-{args.processor_layers}x{args.hidden_dim}-"
         f"{time.strftime('%m_%d_%H')}-{random_run_id:04d}"
@@ -421,6 +437,7 @@ def main():
                     split="test",
                     subsample_step=args.step_length,
                     expanded_test=bool(args.expanded_test),
+                    dataset_path=args.dataset_path
                 ),
                 args.batch_size,
                 shuffle=False,

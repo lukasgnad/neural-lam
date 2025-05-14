@@ -27,7 +27,7 @@ class ARModel(pl.LightningModule):
         self.lr = args.lr
 
         # Load static features for grid/data
-        static_data_dict = utils.load_static_data(args.dataset)
+        static_data_dict = utils.load_static_data(args.dataset, args.dataset_path)
         for static_data_name, static_data_tensor in static_data_dict.items():
             self.register_buffer(
                 static_data_name, static_data_tensor, persistent=False
