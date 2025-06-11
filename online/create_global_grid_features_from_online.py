@@ -7,6 +7,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import zarr
+import gcsfs
+import xarray as xr
 
 # First-party
 from neural_lam import vis
@@ -18,17 +20,18 @@ FIELD_NAMES = (
     "geopotential",
     "land-sea-mask",
 )
-
 DEFAULT_DATASET="global_example_era5"
-DEFAULT_DATASET_PATH = "data"
+DEFAULT_DATASET_PATH = "data/experimental/"
+DEFAULT_ZARR="weatherbench2/datasets/era5/1959-2023_01_10-6h-240x121_equiangular_with_poles_conservative.zarr"
 DEFAULT_PLOT = 0
 
-def create_global_grid_features(dataset:str=DEFAULT_DATASET, plot:int=DEFAULT_PLOT, dataset_path:str=DEFAULT_DATASET_PATH):
-    static_dir_path = os.path.join(dataset_path, dataset, "static")
+def create_global_grid_features(dataset_path:str=DEFAULT_DATASET_PATH, zarr_path:str=DEFAULT_ZARR, plot:int=DEFAULT_PLOT, ):
+    static_dir_path = os.path.join(dataset_path, "static")
     if not os.path.exists(static_dir_path):
         os.makedirs(static_dir_path)
-    fields_group_path = os.path.join(dataset_path, dataset, "fields.zarr")
-    fields_group = zarr.open(fields_group_path, mode="r")
+    print(f"Accessing GCS Zarr dataset from: {zarr_path}")
+    fs = gcsfs.GCSFileSystem(token='anon')
+    fields_group = xr.open_zarr(fs.get_mapper(zarr_path), consolidated=True)
 
     grid_features_list = []  # Each (num_lon, num_lat) numpy array
 
@@ -70,9 +73,6 @@ def create_global_grid_features(dataset:str=DEFAULT_DATASET, plot:int=DEFAULT_PL
         fields_group["land_sea_mask"], dtype=np.float32
     )  # (num_lon, num_lat)
     grid_features_list.append(land_sea_mask)
-    
-    for x in grid_features_list:
-        print(x.shape)
 
     # Reshape and convert to torch
     grid_features_stacked = np.stack(
@@ -97,10 +97,10 @@ def main():
     """
     parser = ArgumentParser(description="Training arguments")
     parser.add_argument(
-        "--dataset",
+        "--zarr_path",
         type=str,
-        default=DEFAULT_DATASET,
-        help="Dataset to create grid features for "
+        default=DEFAULT_ZARR,
+        help="Zarr path to load grid point coordinates from "
         "(default: global_example_era5)",
     )
     parser.add_argument(
@@ -116,7 +116,7 @@ def main():
         help="The path to the folder containing the dataset (default \'data\')",
     )
     args = parser.parse_args()
-    create_global_grid_features(args.dataset, args.plot, args.dataset_path)
+    create_global_grid_features(dataset_path=args.dataset_path, zarr_path=args.zarr_path, plot=args.plot)
 
     
 

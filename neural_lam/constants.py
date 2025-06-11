@@ -61,6 +61,10 @@ SURFACE_PARAMS = [
     "total_precipitation_6hr",
 ]  # = 5 params
 # Total = 83 params
+PREPROCESSING_PARAMS = [
+    "geopotential_at_surface",
+	"land_sea_mask"
+]
 
 # Variable names
 ATMOSPHERIC_PARAMS_SHORT = [
@@ -118,17 +122,22 @@ EVAL_PLOT_VARS = np.concatenate(
     + [np.arange(78, 83)]  # Surface
 )
 
-# Projection and grid
-GRID_SHAPE = (240, 121)  # (long, lat)
+# Projection and grid -> for 1.5° grid
+#GRID_SHAPE = (240, 121)  # (long, lat)
+# for 3°:
+GRID_SHAPE = (120, 60)  # (long, lat)
 
 # Create projection
 MAP_PROJ = cartopy.crs.Robinson()
-GRID_LIMITS = [
+# for 1.5° grid
+'''GRID_LIMITS = [
     -0.75,
     359.25,
     -90,
     90,
-]
+]'''
+# for 3°:
+GRID_LIMITS = [-178.5, 178.5, -88.5, 88.5]
 
 # Time step length (hours)
 TIME_STEP_LENGTH = 6

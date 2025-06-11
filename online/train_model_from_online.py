@@ -1,4 +1,6 @@
 # Standard library
+
+import multiprocessing as mp
 import random
 import time
 from argparse import ArgumentParser
@@ -10,7 +12,7 @@ from lightning_fabric.utilities import seed
 
 # First-party
 from neural_lam import constants, utils
-from neural_lam.era5_dataset import ERA5Dataset
+from neural_lam.era5_dataset_old import ERA5Dataset
 from neural_lam.forecast_to_xarr import forecast_to_xarr
 from neural_lam.models.graph_efm import GraphEFM
 from neural_lam.models.graph_fm import GraphFM
@@ -23,6 +25,7 @@ MODELS = {
     "graph_efm": GraphEFM,
 }
 
+DEFAULT_ZARR="weatherbench2/datasets/era5/1959-2023_01_10-6h-240x121_equiangular_with_poles_conservative.zarr"
 
 def main():
     """
@@ -39,6 +42,12 @@ def main():
         default="meps_example",
         help="Dataset, corresponding to name in data directory "
         "(default: meps_example)",
+    )
+    parser.add_argument(
+        "--zarr_path",
+        type=str,
+        default=DEFAULT_ZARR,
+        help="Zarr online path"
     )
     parser.add_argument(
         "--dataset_path",
@@ -296,18 +305,9 @@ def main():
         default="",
         help="Name for the stored model checkpoints",
     )
-    parser.add_argument(
-        "--periods",
-        type=str,
-        default=None,
-        help=(
-            "Periods for train/val/test as: "
-            "train:<start>,<end>;val:<start>,<end>;test:<start>,<end>"
-        )
-    )
-
     args = parser.parse_args()
-
+    
+    
     # Asserts for arguments
     assert args.model in MODELS, f"Unknown model: {args.model}"
     assert args.eval in (
@@ -332,7 +332,6 @@ def main():
     train_loader = torch.utils.data.DataLoader(
         ds_class(
             args.dataset,
-            periods=args.periods,
             pred_length=args.ar_steps,
             split="train",
             subsample_step=args.step_length,
@@ -341,11 +340,13 @@ def main():
         args.batch_size,
         shuffle=True,
         num_workers=args.n_workers,
+        persistent_workers=True,
+        prefetch_factor=2,
+        pin_memory=True,
     )
     val_loader = torch.utils.data.DataLoader(
         ds_class(
             args.dataset,
-            periods=args.periods,
             pred_length=args.eval_leads,
             split="val",
             subsample_step=args.step_length,
@@ -354,6 +355,9 @@ def main():
         args.batch_size,
         shuffle=False,
         num_workers=args.n_workers,
+        persistent_workers=True,
+        prefetch_factor=1,
+        pin_memory=True,
     )
 
     # Instantiate model + trainer
@@ -380,12 +384,11 @@ def main():
     if args.eval:
         prefix = f"eval-{args.eval}-"
     if args.name:
-        run_name = args.name
-    else:
-        run_name = (
-            f"{prefix}{args.model}-{args.processor_layers}x{args.hidden_dim}-"
-            f"{time.strftime('%m_%d_%H')}-{random_run_id:04d}"
-        )
+        prefix = f"{args.name}-{prefix}"
+    run_name = (
+        f"{prefix}{args.model}-{args.processor_layers}x{args.hidden_dim}-"
+        f"{time.strftime('%m_%d_%H')}-{random_run_id:04d}"
+    )
 
     # Callbacks for saving model checkpoint
     callbacks = []
@@ -446,7 +449,6 @@ def main():
             eval_loader = torch.utils.data.DataLoader(
                 ds_class(
                     args.dataset,
-                    periods=args.periods,
                     pred_length=args.eval_leads,
                     split="test",
                     subsample_step=args.step_length,
@@ -457,7 +459,7 @@ def main():
                 shuffle=False,
                 num_workers=args.n_workers,
             )
-
+        
         print(f"Running evaluation on {args.eval}")
         if args.save_forecasts:
             print("Saving eval forecasts to zarr")
@@ -475,6 +477,7 @@ def main():
             )
             print("Forecasts saved")
         else:
+            
             trainer.test(model=model, dataloaders=eval_loader)
     else:
         # Train model
@@ -486,7 +489,5 @@ def main():
 
 
 if __name__ == "__main__":
+    mp.set_start_method("forkserver", force=True)
     main()
-    torch.cuda.empty_cache()
-    import gc
-    gc.collect()

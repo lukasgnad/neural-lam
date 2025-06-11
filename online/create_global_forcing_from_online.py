@@ -1,0 +1,179 @@
+# Standard library
+import os
+from argparse import ArgumentParser
+
+# Third-party
+import graphcast.data_utils as gc_du
+import graphcast.solar_radiation as gc_sr
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
+import zarr
+import gcsfs
+import xarray as xr
+
+# First-party
+from neural_lam import vis
+
+DEFAULT_DATASET="global_example_era5"
+DEFAULT_ZARR="weatherbench2/datasets/era5/1959-2023_01_10-6h-240x121_equiangular_with_poles_conservative.zarr"
+DEFAULT_DATASET_PATH = "data"
+DEFAULT_PLOT = 0
+
+def progress_to_sin_cos(progress):
+    """
+    Transform year/day progress in [0,1] with sin and cos, normalized to [0,1]
+    """
+    prog_sin = (np.sin(progress * 2 * np.pi) + 1) / 2
+    prog_cos = (np.cos(progress * 2 * np.pi) + 1) / 2
+    return prog_sin, prog_cos
+
+
+def create_global_forcing(plot:int=DEFAULT_PLOT,
+                          zarr_path:str=DEFAULT_ZARR, dataset_path=DEFAULT_DATASET_PATH):
+    print(f"Accessing GCS Zarr dataset from: {zarr_path}")
+    fs = gcsfs.GCSFileSystem(token='anon')
+    fields = xr.open_zarr(fs.get_mapper(zarr_path), consolidated=True)
+    forcing_path = os.path.join(dataset_path, "forcing.zarr")
+    # TODO change
+    time_slice = slice("2019-01-01T12", "2019-12-31T18")
+    fields_group = fields.sel(time=time_slice)
+    # Lat-lon
+    grid_lat_vals = np.array(
+        fields_group["latitude"], dtype=np.float32
+    )  # (num_lat,)
+    grid_lon_vals = np.array(
+        fields_group["longitude"], dtype=np.float32
+    )  # (num_long,)
+    num_lat = grid_lat_vals.shape[0]
+    num_lon = grid_lon_vals.shape[0]
+
+    # Construct timestamps
+    # Time 0 here is 1959-01-01, 00:00
+    print("Constructing timestamps")
+    timestamps = fields_group.coords["time"].data.astype("datetime64[s]")
+
+    # Number of seconds since unix time (can be negative)
+    seconds_since_epoch = timestamps.astype(np.int64)
+    num_time = seconds_since_epoch.shape[0]
+
+    # Create zarr to save to
+    forcing_field_shape = (num_time, num_lon, num_lat)
+    forcing_fields_dict = {}
+
+    # TOA radiation
+    print("Generating TOA radiation")
+    toa_array = gc_sr.get_toa_incident_solar_radiation(
+        timestamps,
+        grid_lat_vals,
+        grid_lon_vals,
+    )  # (num_time, num_lat, num_lon)
+    # Normalize to [0,1]
+    toa_min = toa_array.min()
+    toa_max = toa_array.max()
+    print(f"Min {toa_min}, max {toa_max}")
+    
+    min_max = np.array([toa_min, toa_max])
+    print("Saving parameter weights...")
+    static_dir_path = os.path.join(dataset_path, "static")
+    if not os.path.exists(static_dir_path):
+        os.makedirs(static_dir_path)
+    np.save(
+        os.path.join(static_dir_path, "toa_min_max.npy"), min_max
+    )
+    
+    toa_array = (toa_array - toa_min) / (toa_max - toa_min)
+    forcing_fields_dict["toa_incident_radiation"] = toa_array.transpose(0, 2, 1)
+
+    # Year progress
+    print("Generating day + year progress features")
+    year_progress = gc_du.get_year_progress(seconds_since_epoch)
+    # (num_time,)
+    year_prog_sin, year_prog_cos = progress_to_sin_cos(year_progress)
+    forcing_fields_dict["sin_year_progress"] = np.broadcast_to(
+        year_prog_sin[:, np.newaxis, np.newaxis], forcing_field_shape
+    )
+    forcing_fields_dict["cos_year_progress"] = np.broadcast_to(
+        year_prog_cos[:, np.newaxis, np.newaxis], forcing_field_shape
+    )
+
+    # Day progress
+    # Note that this is slightly off as GC only uses a similar modulo calc.
+    day_progress = gc_du.get_day_progress(
+        seconds_since_epoch, grid_lon_vals
+    )  # (num_time, num_lon)
+    day_prog_sin, day_prog_cos = progress_to_sin_cos(day_progress)
+    forcing_fields_dict["sin_day_progress"] = np.broadcast_to(
+        day_prog_sin[:, :, np.newaxis], forcing_field_shape
+    )
+    forcing_fields_dict["cos_day_progress"] = np.broadcast_to(
+        day_prog_cos[:, :, np.newaxis], forcing_field_shape
+    )
+
+    # Save as xarray stored with zarr
+    print("Saving xarray")
+    coord_names = ("time", "longitude", "latitude")
+    xa_ds = xr.Dataset(
+        {
+            var_name: (coord_names, var_vals)
+            for var_name, var_vals in forcing_fields_dict.items()
+        },
+        coords={coord: fields_group.coords[coord] for coord in coord_names},
+    )
+    xa_da = (
+        xa_ds.to_dataarray("forcing_var")
+        .transpose("time", "longitude", "latitude", "forcing_var")
+        .chunk({"time": 1, "longitude": -1, "latitude": -1, "forcing_var": -1})
+    )
+    xa_da.to_zarr(forcing_path, mode="w")
+    print("Done!")
+
+    if plot:
+        # (num_vars, num_time, num_lon, num_lat)
+        for time_i, timestamp in enumerate(timestamps):
+            time_slice = xa_da.isel(time=time_i)  # (num_lon, num_lat, num_vars)
+
+            for var_name in time_slice.coords["forcing_var"].data:
+                forcing_field_xa = time_slice.sel(forcing_var=var_name)
+                forcing_field = torch.tensor(
+                    forcing_field_xa.to_numpy(), dtype=torch.float32
+                ).flatten()
+                vis.plot_prediction(
+                    forcing_field,
+                    forcing_field,
+                    title=f"{timestamp} UTC, {var_name}",
+                )
+                plt.show()
+
+    
+
+def main():
+    """
+    Pre-compute all static features related to the grid nodes
+    """
+    parser = ArgumentParser(description="Training arguments")
+    parser.add_argument(
+        "--plot",
+        type=int,
+        default=DEFAULT_PLOT,
+        help="If fields should be plotted " "(default: 0 (false))",
+    )
+    parser.add_argument(
+        "--zarr_path",
+        type=str,
+        default=DEFAULT_ZARR,
+        help="The path to the folder containing the dataset (default \'data\')",
+    )
+    parser.add_argument(
+        "--dataset_path",
+        type=str,
+        default=DEFAULT_DATASET_PATH,
+        help="The path to the folder containing the dataset (default \'data\')",
+    )
+    args = parser.parse_args()
+    create_global_forcing(plot=args.plot, zarr_path=args.zarr_path, dataset_path=args.dataset_path)
+
+
+
+if __name__ == "__main__":
+    main()

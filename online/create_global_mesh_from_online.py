@@ -1,6 +1,9 @@
 # Standard library
 import os
 from argparse import ArgumentParser
+import xarray as xr
+import gcsfs
+
 
 # Third-party
 import matplotlib
@@ -26,6 +29,7 @@ GC_SPATIAL_FEATURES_KWARGS = {
 
 DEFAULT_DATASET="global_example_era5"
 DEFAULT_GRAPH = "global_multiscale"
+DEFAULT_ZARR="weatherbench2/datasets/era5/1959-2023_01_10-6h-240x121_equiangular_with_poles_conservative.zarr"
 DEFAULT_PLOT = 0
 DEFAULT_SPLITS = 3
 DEFAULT_LEVELS = None
@@ -132,16 +136,16 @@ def inter_mesh_connection(from_mesh, to_mesh):
     )  # (2, M)
     return edge_index
 
-def create_global_mesh(dataset:str=DEFAULT_DATASET, graph:str=DEFAULT_GRAPH, plot:int=DEFAULT_PLOT,
-                       splits:int=DEFAULT_SPLITS, levels:int=DEFAULT_LEVELS, hierarchical:int=DEFAULT_HIERARCHICAL,
-                       dataset_path:str=DEFAULT_DATASET_PATH):
+def create_global_mesh(zarr_path:str=DEFAULT_ZARR, graph:str=DEFAULT_GRAPH, plot:int=DEFAULT_PLOT,
+                       splits:int=DEFAULT_SPLITS, levels:int=DEFAULT_LEVELS, hierarchical:int=DEFAULT_HIERARCHICAL):
     
-    fields_group_path = os.path.join(dataset_path, dataset, "fields.zarr")
     graph_dir_path = os.path.join("graphs", graph)
     os.makedirs(graph_dir_path, exist_ok=True)
 
-    # Load grid positions
-    fields_group = zarr.open(fields_group_path, mode="r")
+    print(f"Accessing GCS Zarr dataset from: {zarr_path}")
+    fs = gcsfs.GCSFileSystem(token='anon')
+    fields_group = xr.open_zarr(fs.get_mapper(zarr_path), consolidated=True)
+
     grid_lat = np.array(
         fields_group["latitude"], dtype=np.float32
     )  # (num_lat,)
@@ -441,10 +445,10 @@ def main():
     """
     parser = ArgumentParser(description="Graph generation arguments")
     parser.add_argument(
-        "--dataset",
+        "--zarr_path",
         type=str,
-        default=DEFAULT_DATASET,
-        help="Dataset to load grid point coordinates from "
+        default=DEFAULT_ZARR,
+        help="Zarr path to load grid point coordinates from "
         "(default: global_example_era5)",
     )
     parser.add_argument(
@@ -479,14 +483,9 @@ def main():
         default=DEFAULT_HIERARCHICAL,
         help="Generate hierarchical mesh graph (default: 0, no)",
     )
-    parser.add_argument(
-        "--dataset_path",
-        type=str,
-        default=DEFAULT_DATASET_PATH,
-        help="The path to the folder containing the dataset (default \'data\')",
-    )
     args = parser.parse_args()
-    create_global_mesh(args.dataset, args.graph, args.plot, args.splits, args.levels, args.hierarchical, args.dataset_path)
+    create_global_mesh(zarr_path=args.zarr_path, graph=args.graph, plot=args.plot, splits=args.splits,
+                       levels=args.levels, hierarchical=args.hierarchical)
     
 
 

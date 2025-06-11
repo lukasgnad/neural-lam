@@ -16,16 +16,6 @@ import xarray as xa
 # First-party
 from neural_lam import constants, utils
 
-def parse_periods(periods_str):
-    periods = {}
-    if periods_str is None:
-        return periods
-    for period in periods_str.split(";"):
-        name, dates = period.split(":")
-        start, end = dates.split(",")
-        periods[name] = slice(start, end)
-    return periods
-
 
 class ERA5Dataset(torch.utils.data.Dataset):
     """
@@ -35,10 +25,10 @@ class ERA5Dataset(torch.utils.data.Dataset):
     def __init__(
         self,
         dataset_name,
-        periods="",
         pred_length=40,
         split="train",
         standardize=True,
+        expanded_test=False,
         dataset_path="data",
         **kwarg,  # pylint: disable=unused-argument
     ):
@@ -53,9 +43,37 @@ class ERA5Dataset(torch.utils.data.Dataset):
         forcing_xda = xa.open_dataarray(forcing_path, engine="zarr")
         # each with dims (num_time, num_lon, num_lat)
 
-        # Usage:
-        split_slices = parse_periods(periods)
-        print(split_slices)
+        # Slice to split into train / val / test
+        if "example" in dataset_name:
+            # Example subset, create some example split
+            split_slices = {
+                "train": slice("1959-01-01T12", "1959-01-03T12"),  # 3 days
+                "val": slice("1959-01-03T18", "1959-01-04T18"),  # 1 day
+                "test": slice("1959-01-03T18", "1959-01-04T18"),  # Same as val
+            }
+        elif "train001" in dataset_name:
+            # Example subset, create some example split
+            print("Splitting for train001...")
+            split_slices = {
+                "train": slice("2019-01-01T12", "2019-09-30T12"),  # 3 days
+                "val": slice("2019-10-01T12", "2019-10-31T12"),  # 1 day
+                "test": slice("2019-11-01T12", "2019-12-31T18"),  # Same as val
+            }
+        else:
+            # Actual dataset
+            # Note that we start at 12 on first day as first two timesteps have
+            # NaN for precipitation
+            split_slices = {
+                "train": slice("1959-01-01T12", "2017-12-31T12"),  # 1959-2017
+                "val": slice("2017-12-31T18", "2019-12-31T12"),  # 2018-2019
+            }
+            if expanded_test:
+                # 2020-2023
+                split_slices["test"] = slice("2019-12-31T18", "2023-12-31T18")
+            else:
+                # 2020 only, consistent with WB2 (forecasts extend into 2021)
+                # Extend 40 time steps into 2021
+                split_slices["test"] = slice("2019-12-31T18", "2021-01-10T18")
 
         fields_ds_split = fields_xds.sel(time=split_slices[split])
         forcing_ds_split = forcing_xda.sel(time=split_slices[split])

@@ -32,6 +32,8 @@ share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+venv/*
+venv
 
 # pyenv
 .python-version

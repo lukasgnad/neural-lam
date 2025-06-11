@@ -1,14 +1,14 @@
 #!/bin/bash -x
 #SBATCH --nodes=1
-#SBATCH --time=00:10:00
+#SBATCH --time=6:00:00
 #SBATCH --gres=gpu:4
-#SBATCH --partition=dev_accelerated
+#SBATCH --partition=accelerated
 #SBATCH --ntasks-per-node=4
-#SBATCH --mem=10gb
+#SBATCH --mem=200gb
 #SBATCH --mail-type="END"
 #SBATCH --mail-user="xo8179@partner.kit.edu"
-#SBATCH --error=out/experimental_error_%j.log
-#SBATCH --output=out/experimental_output_%j.log
+#SBATCH --error=out/error_%j.log
+#SBATCH --output=out/output_%j.log
 #SBATCH --account=hk-project-p0024498
 
 #exec > out/log_${SLURM_JOB_ID}.log 2>&1
@@ -35,8 +35,10 @@ echo "Current working directory:"
 pwd
 echo ""
 echo "----------------------------------------------"
-echo "Running python file"
-
-srun python train_model.py --name example --model graph_fm --graph global_hierarchical --ar_steps 1 --eval_leads 1 --n_workers 4 --dataset global_era5_example --epochs 10 --dataset_path /hkfs/work/workspace/scratch/xo8179-neural_lam/data/data/
-
+echo "Running python file with following command:"
+echo "srun python train_model_from_online.py --name train003 --model graphcast --graph global_multilevel_train003 --dataset global_era5_train003 --dataset_path /hkfs/work/workspace/scratch/xo8179-neural_lam/data/data/ --epochs 200
+"
+echo "----------------------------------------------"
+echo ""
+srun python train_model_from_online.py --name train003 --model graphcast --graph global_multilevel_train003 --dataset global_era5_train003 --dataset_path /hkfs/work/workspace/scratch/xo8179-neural_lam/data/data/ --epochs 200
 

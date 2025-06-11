@@ -7,11 +7,12 @@ import graphcast.losses as gc_l
 import numpy as np
 import torch
 import xarray as xa
+import gcsfs
 from tqdm import tqdm
 
 # First-party
 from neural_lam import constants
-from neural_lam.era5_dataset import ERA5Dataset
+from neural_lam.era5_dataset_old import ERA5Dataset
 from neural_lam.weather_dataset import WeatherDataset
 
 DEFAULT_DATASET= "meps_example"
@@ -19,10 +20,11 @@ DEFAULT_BATCH_SIZE=32
 DEFAULT_STEP_LENGTH =3
 DEFAULT_N_WORKERS=4
 DEFAULT_DATASET_PATH="data"
+DEFAULT_ZARR="weatherbench2/datasets/era5/1959-2023_01_10-6h-240x121_equiangular_with_poles_conservative.zarr"
 
 def create_parameter_weights(dataset:str=DEFAULT_DATASET, batch_size:int=DEFAULT_BATCH_SIZE,
                              step_length:int=DEFAULT_STEP_LENGTH, n_workers:int=DEFAULT_N_WORKERS,
-                             dataset_path:str=DEFAULT_DATASET_PATH, periods:str=""):
+                             dataset_path:str=DEFAULT_DATASET_PATH, zarr_path=DEFAULT_ZARR):
     static_dir_path = os.path.join(dataset_path, dataset, "static")
     if not os.path.exists(static_dir_path):
         os.makedirs(static_dir_path)
@@ -49,8 +51,11 @@ def create_parameter_weights(dataset:str=DEFAULT_DATASET, batch_size:int=DEFAULT
         # (num_variables,)
 
         # Compute spatial weighting for grid nodes
-        fields_group_path = os.path.join(dataset_path, dataset, "fields.zarr")
-        xds = xa.open_zarr(fields_group_path)
+        print(f"Accessing GCS Zarr dataset from: {zarr_path}")
+        fs = gcsfs.GCSFileSystem(token='anon')
+        xds = xa.open_zarr(fs.get_mapper(zarr_path), consolidated=True)
+        # fields_group_path = os.path.join(dataset_path, dataset, "fields.zarr")
+        # xds = xa.open_zarr(fields_group_path)
         # Hack since GC code uses "lat" for some reason
         xds = xds.assign_coords({"lat": xds.coords["latitude"]})
 
@@ -89,7 +94,6 @@ def create_parameter_weights(dataset:str=DEFAULT_DATASET, batch_size:int=DEFAULT
     if global_ds:
         ds = ERA5Dataset(
             dataset,
-            periods=periods,
             split="train",
             pred_length=1,  # Use 1 to get each time step only once
             standardize=False,
@@ -98,7 +102,6 @@ def create_parameter_weights(dataset:str=DEFAULT_DATASET, batch_size:int=DEFAULT
     else:
         ds = WeatherDataset(
             dataset,
-            periods=periods,
             split="train",
             subsample_step=1,
             pred_length=63,
@@ -153,7 +156,6 @@ def create_parameter_weights(dataset:str=DEFAULT_DATASET, batch_size:int=DEFAULT
     if global_ds:
         ds_standard = ERA5Dataset(
             dataset,
-            periods=periods,
             split="train",
             pred_length=1,  # Use 1 to get each time step only once
             standardize=True,
@@ -249,18 +251,18 @@ def main():
         help="The path to the folder containing the dataset (default \'data\')",
     )
     parser.add_argument(
-        "--periods",
+        "--zarr_path",
         type=str,
-        default=None,
-        help=(
-            "Periods for train/val/test as: "
-            "train:<start>,<end>;val:<start>,<end>;test:<start>,<end>"
-        )
+        default=DEFAULT_ZARR,
+        help="Zarr path to load grid point coordinates from "
+        "(default: global_example_era5)",
     )
     args = parser.parse_args()
-    create_parameter_weights(dataset=args.dataset, batch_size=args.batch_size, step_length=args.step_length, n_workers=args.n_workers, dataset_path=args.dataset_path, periods=args.periods)
+    create_parameter_weights(dataset=args.dataset, batch_size=args.batch_size, step_length=args.step_length,
+                             n_workers=args.n_workers, dataset_path=args.dataset_path, zarr_path=args.zarr_path)
     
 
-
+import multiprocessing as mp
 if __name__ == "__main__":
+    mp.set_start_method("forkserver")
     main()
