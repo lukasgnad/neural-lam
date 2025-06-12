@@ -10,18 +10,18 @@ import xarray as xa
 from tqdm import tqdm
 
 # First-party
-from neural_lam import constants
+from neural_lam import constants # type: ignore
 from neural_lam.era5_dataset import ERA5Dataset
 from neural_lam.weather_dataset import WeatherDataset
 
 DEFAULT_DATASET= "meps_example"
 DEFAULT_BATCH_SIZE=32
-DEFAULT_STEP_LENGTH =3
+DEFAULT_LAM_STEP_LENGTH =3
 DEFAULT_N_WORKERS=4
 DEFAULT_DATASET_PATH="data"
 
 def create_parameter_weights(dataset:str=DEFAULT_DATASET, batch_size:int=DEFAULT_BATCH_SIZE,
-                             step_length:int=DEFAULT_STEP_LENGTH, n_workers:int=DEFAULT_N_WORKERS,
+                             step_length:int=DEFAULT_LAM_STEP_LENGTH, n_workers:int=DEFAULT_N_WORKERS,
                              dataset_path:str=DEFAULT_DATASET_PATH, periods:str=""):
     static_dir_path = os.path.join(dataset_path, dataset, "static")
     if not os.path.exists(static_dir_path):
@@ -232,8 +232,8 @@ def main():
     parser.add_argument(
         "--step_length",
         type=int,
-        default=DEFAULT_STEP_LENGTH,
-        help="Step length in hours to consider single time step (for LAM only)"
+        default=DEFAULT_LAM_STEP_LENGTH,
+        help="FOR LAM ONLY: Step length in hours to consider single time step"
         " (default: 3)",
     )
     parser.add_argument(

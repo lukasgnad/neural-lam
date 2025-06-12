@@ -11,7 +11,7 @@ import torch
 import xarray as xa
 
 # First-party
-from neural_lam import vis
+from neural_lam import vis # type: ignore
 
 DEFAULT_DATASET="global_example_era5"
 DEFAULT_DATASET_PATH = "data"

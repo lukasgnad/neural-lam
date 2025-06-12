@@ -57,7 +57,7 @@ def main():
     parser.add_argument(
         "--step_length",
         type=int,
-        default=Weights.DEFAULT_STEP_LENGTH,
+        default=Weights.DEFAULT_LAM_STEP_LENGTH,
         help="Step length in hours to consider single time step (for LAM only)"
         " (default: 3)",
     )

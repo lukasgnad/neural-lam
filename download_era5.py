@@ -1,3 +1,4 @@
+from argparse import ArgumentParser
 import xarray as xr
 import gcsfs
 import os
@@ -104,20 +105,41 @@ def print_example(LOCAL_ZARR_PATH):
 	print(subset["time"].values[-5:])  # last few times
     
 if __name__ == "__main__":
+	"""
+	Pre-compute parameter weights to be used in loss function
+	"""
+	parser = ArgumentParser(description="Training arguments")
+	parser.add_argument(
+		"--out",
+		type=str,
+		default="/hkfs/work/workspace/scratch/xo8179-neural_lam/data/data/global_era5_1980_2022",
+		help="Local output directory",
+	)
+	parser.add_argument(
+		"--start",
+		type=str,
+		default="1980-01-01",
+		help="Start date",
+	)
+	parser.add_argument(
+		"--end",
+		type=str,
+		default="2022-12-31",
+		help="End Date",
+	)
+	args = parser.parse_args()
+
+
 	# Example usage: download 2018–2020 data
 	ZARR_PATH_GCS = "weatherbench2/datasets/era5/1959-2023_01_10-6h-240x121_equiangular_with_poles_conservative.zarr"
-	EXAMPLE = False
 
-	LOCAL_OUTPUT_DIR = "/hkfs/work/workspace/scratch/xo8179-neural_lam/data/data/global_era5_1980_2022"
-	START_DATE = "1980-01-01"
-	END_DATE = "2022-12-31"
- 
+
 	""" MISSING_PERIODS = [
-        ("2023-01-01", "2024-12-31")
-    ]
+		("2023-01-01", "2024-12-31")
+	]
 
 	for start, end in MISSING_PERIODS:
 		append_era5_years_to_existing_zarr(ZARR_PATH_GCS, LOCAL_OUTPUT_DIR + "/fields.zarr", start, end) """
-  
-	#download_era5_subset_reduced(ZARR_PATH_GCS, LOCAL_OUTPUT_DIR, START_DATE, END_DATE)
-	print_example(LOCAL_OUTPUT_DIR + "/fields.zarr")
+
+	download_era5_subset_reduced(ZARR_PATH_GCS, args.out, args.start, args.end)
+	# print_example(LOCAL_OUTPUT_DIR + "/fields.zarr")

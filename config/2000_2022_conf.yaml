@@ -1,0 +1,18 @@
+run_name: 2000_2022
+dataset_name: global_era5_2000_2022_3deg
+dataset_path: /hkfs/work/workspace_haic/scratch/xo8179-neural_lam/data/data
+graph_name: global_multilevel_2000_2022
+model_name: graphcast
+tmp_path: $TMPDIR
+hidden_dim: 64
+epochs_first: 70
+epochs_second: 20
+epochs_third: 20
+
+lr_first: 1e-3
+lr_second: 1e-4
+lr_third: 1e-4
+unroll_first: 1
+unroll_second: 4
+unroll_third: 8
+periods: "train:2000-01-01,2018-12-31;val:2019-01-01,2020-12-31;test:2021-01-01,2022-12-31"
