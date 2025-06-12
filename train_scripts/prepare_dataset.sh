@@ -1,9 +1,9 @@
 #!/bin/bash -x
 #SBATCH --nodes=1
-#SBATCH --time=2:00:00
-#SBATCH --partition=cpuonly
+#SBATCH --time=01:00:00
+#SBATCH --partition=dev_cpuonly
 #SBATCH --ntasks-per-node=4
-#SBATCH --mem=300gb
+#SBATCH --mem=200gb
 #SBATCH --mail-type="END"
 #SBATCH --mail-user="xo8179@partner.kit.edu"
 #SBATCH --error=out/error_%j.log
@@ -21,6 +21,10 @@ echo "CPUs per node:    $SLURM_JOB_CPUS_PER_NODE"
 echo "Tasks per node:   $SLURM_NTASKS_PER_NODE"
 echo "Memory per Node:  $SLURM_MEM_PER_NODE"
 echo "==========================="
+
+dataset=global_era5_1980_2022_3deg
+dataset_path=/hkfs/work/workspace/scratch/xo8179-neural_lam/data/data/
+periods="train:1980-01-01,2018-12-31;val:2019-01-01,2020-12-31;test:2021-01-01,2022-12-31"
 
 cd /home/hk-project-pai00005/xo8179/neural_lam_fork/neural-lam
 source venv/bin/activate
@@ -41,10 +45,10 @@ echo "Loaded Cuda"
 #     --dataset_path /hkfs/work/workspace/scratch/xo8179-neural_lam/data/data/
 
 # python create_global_forcing.py \
-#     --dataset global_era5_1980_2022 \
-#     --dataset_path /hkfs/work/workspace/scratch/xo8179-neural_lam/data/data/
+#     --dataset ${dataset} \
+#     --dataset_path ${dataset_path}
 
 python create_parameter_weights.py \
-    --dataset global_era5_1980_2022 \
-    --dataset_path /hkfs/work/workspace/scratch/xo8179-neural_lam/data/data/ \
-    --periods "train:1980-01-01T00,2016-12-31T18;val:2017-01-01T00,2019-12-31T18;test:2020-01-01T00,2022-12-31T18"
+    --dataset ${dataset} \
+    --dataset_path ${dataset_path} \
+    --periods ${periods}

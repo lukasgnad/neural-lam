@@ -73,6 +73,7 @@ echo "    --dataset_path ${tmp_path} \\"
 echo "    --epochs ${epochs_first} \\"
 echo "    --ar_steps ${unroll_first} \\"
 echo "    --periods ${periods} \\"
+echo "    --lr ${lr_first} \\"
 echo "    --hidden_dim ${hidden_dim}"
 echo "GPU state before 1st run:"
 nvidia-smi
@@ -87,6 +88,7 @@ srun python train_model.py \
     --epochs ${epochs_first} \
     --ar_steps ${unroll_first} \
     --periods ${periods} \
+    --lr ${lr_first} \
     --hidden_dim ${hidden_dim}
 
 
@@ -103,6 +105,7 @@ echo "    --epochs ${epochs_second} \\"
 echo "    --ar_steps ${unroll_second} \\"
 echo "    --load saved_models/${run_name}_01/last.ckpt \\"
 echo "    --periods ${periods} \\"
+echo "    --lr ${lr_second} \\"
 echo "    --hidden_dim ${hidden_dim}"
 echo "GPU state before 2nd run:"
 nvidia-smi
@@ -118,6 +121,7 @@ srun python train_model.py \
     --ar_steps ${unroll_second} \
     --load saved_models/${run_name}_01/last.ckpt \
     --periods ${periods} \
+    --lr ${lr_second} \
     --hidden_dim ${hidden_dim}
 
 echo ""
@@ -133,6 +137,7 @@ echo "    --epochs ${epochs_third} \\"
 echo "    --ar_steps ${unroll_third} \\"
 echo "    --load saved_models/${run_name}_02/last.ckpt \\"
 echo "    --periods ${periods} \\"
+echo "    --lr ${lr_third} \\"
 echo "    --hidden_dim ${hidden_dim}"
 echo "GPU state before 3rd run:"
 nvidia-smi
@@ -148,4 +153,5 @@ srun python train_model.py \
     --ar_steps ${unroll_third} \
     --load saved_models/${run_name}_02/last.ckpt \
     --periods ${periods} \
+    --lr ${lr_third} \
     --hidden_dim ${hidden_dim}
