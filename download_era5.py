@@ -131,7 +131,8 @@ if __name__ == "__main__":
 
 
 	# Example usage: download 2018–2020 data
-	ZARR_PATH_GCS = "weatherbench2/datasets/era5/1959-2023_01_10-6h-240x121_equiangular_with_poles_conservative.zarr"
+	# ZARR_PATH_GCS = "weatherbench2/datasets/era5/1959-2023_01_10-6h-240x121_equiangular_with_poles_conservative.zarr"
+	ZARR_PATH_GCS = "weatherbench2/datasets/era5/1959-2022-6h-128x64_equiangular_with_poles_conservative.zarr"
 
 
 	""" MISSING_PERIODS = [

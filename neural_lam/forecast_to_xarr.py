@@ -285,6 +285,9 @@ def forecast_to_xarr(
         },
         coords=ds_coords,
     )
+
+    forecast_xds["prediction_timedelta"].encoding["dtype"] = "timedelta64[ns]"
+
     # Need to set this encoding to save/load correct times from disk
     time_enc_unit = "nanoseconds since 1970-01-01"
     forecast_xds.time.encoding["units"] = time_enc_unit

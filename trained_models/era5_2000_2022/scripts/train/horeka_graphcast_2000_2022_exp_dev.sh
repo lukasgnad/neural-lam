@@ -7,8 +7,8 @@
 #SBATCH --mem=200gb
 #SBATCH --mail-type="END"
 #SBATCH --mail-user="xo8179@partner.kit.edu"
-#SBATCH --error=out/error_%j.log
-#SBATCH --output=out/output_%j.log
+#SBATCH --error=/home/hk-project-pai00005/xo8179/neural_lam_fork/neural-lam/trained_models/era5_2000_2022/logs/error_%j.log
+#SBATCH --output=/home/hk-project-pai00005/xo8179/neural_lam_fork/neural-lam/trained_models/era5_2000_2022/logs/output_%j.log
 
 #exec > out/log_${SLURM_JOB_ID}.log 2>&1
 

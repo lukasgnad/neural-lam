@@ -8,19 +8,29 @@ import pytorch_lightning as pl
 import torch
 from lightning_fabric.utilities import seed
 
+import shutil
+import os
+
 # First-party
 from neural_lam import constants, utils
 from neural_lam.era5_dataset import ERA5Dataset
+from neural_lam.era5_dataset_persistence import ERA5PersistenceDataset
 from neural_lam.forecast_to_xarr import forecast_to_xarr
 from neural_lam.models.graph_efm import GraphEFM
 from neural_lam.models.graph_fm import GraphFM
 from neural_lam.models.graphcast import GraphCast
 from neural_lam.weather_dataset import WeatherDataset
+from neural_lam.models.persistence_baseline import PersistenceBaseline
+from neural_lam.models.persistence_baseline_simple import (
+    PersistenceBaselineSimple,
+)
 
 MODELS = {
     "graphcast": GraphCast,
     "graph_fm": GraphFM,
     "graph_efm": GraphEFM,
+    "persistence": PersistenceBaseline,
+    "persistence_simple": PersistenceBaselineSimple,
 }
 
 
@@ -44,7 +54,7 @@ def main():
         "--dataset_path",
         type=str,
         default="data",
-        help="The path to the folder containing the dataset (default \'data\')",
+        help="The path to the folder containing the dataset (default 'data')",
     )
     parser.add_argument(
         "--model",
@@ -58,7 +68,7 @@ def main():
     parser.add_argument(
         "--n_workers",
         type=int,
-        default=16,
+        default=4,
         help="Number of workers in data loader (default: 4)",
     )
     parser.add_argument(
@@ -303,7 +313,13 @@ def main():
         help=(
             "Periods for train/val/test as: "
             "train:<start>,<end>;val:<start>,<end>;test:<start>,<end>"
-        )
+        ),
+    )
+    parser.add_argument(
+        "--wandb_output",
+        type=str,
+        default=None,
+        help="Output folder ",
     )
 
     args = parser.parse_args()
@@ -323,25 +339,27 @@ def main():
     seed.seed_everything(args.seed)
 
     # Load data
-    if args.dataset.startswith("global"):
+    if args.model == "persistence":
+        ds_class = ERA5PersistenceDataset
+    else:
         ds_class = ERA5Dataset
-    else:  # LAM
-        assert args.step_length <= 3, "Too high step length"
-        ds_class = WeatherDataset
 
-    train_loader = torch.utils.data.DataLoader(
-        ds_class(
-            args.dataset,
-            periods=args.periods,
-            pred_length=args.ar_steps,
-            split="train",
-            subsample_step=args.step_length,
-            dataset_path=args.dataset_path
-        ),
-        args.batch_size,
-        shuffle=True,
-        num_workers=args.n_workers,
-    )
+    if not args.eval:
+        train_loader = torch.utils.data.DataLoader(
+            ds_class(
+                args.dataset,
+                periods=args.periods,
+                pred_length=args.ar_steps,
+                split="train",
+                subsample_step=args.step_length,
+                dataset_path=args.dataset_path,
+                pin_memory=True,
+            ),
+            args.batch_size,
+            shuffle=True,
+            num_workers=args.n_workers,
+            persistent_workers=True,
+        )
     val_loader = torch.utils.data.DataLoader(
         ds_class(
             args.dataset,
@@ -349,11 +367,13 @@ def main():
             pred_length=args.eval_leads,
             split="val",
             subsample_step=args.step_length,
-            dataset_path=args.dataset_path
+            dataset_path=args.dataset_path,
         ),
         args.batch_size,
         shuffle=False,
         num_workers=args.n_workers,
+        persistent_workers=True,
+        pin_memory=True,
     )
 
     # Instantiate model + trainer
@@ -417,23 +437,43 @@ def main():
         project=constants.WANDB_PROJECT, name=run_name, config=args
     )
 
+    run = logger.experiment
+    print(run.dir)  # The full path to the run directory
+    print(run.id)  # Unique ID (used in folder name like run-abc123)
+
     # Training strategy
     # If doing pure autoencoder training (kl_beta = 0), the prior network is not
     # used at all in producing the loss. This is desired, but DDP complains.
     strategy = "ddp" if args.kl_beta > 0 else "ddp_find_unused_parameters_true"
 
-    trainer = pl.Trainer(
-        max_epochs=args.epochs,
-        deterministic=True,
-        strategy=strategy,
-        accelerator=device_name,
-        logger=logger,
-        log_every_n_steps=1,
-        callbacks=callbacks,
-        check_val_every_n_epoch=args.val_interval,
-        precision=args.precision,
-        num_sanity_val_steps=args.sanity_batches,
-    )
+    if args.eval and not args.eval == "val":
+        trainer = pl.Trainer(
+            max_epochs=args.epochs,
+            deterministic=True,
+            devices=torch.cuda.device_count(),
+            strategy=strategy,
+            accelerator=device_name,
+            logger=logger,
+            log_every_n_steps=1,
+            callbacks=callbacks,
+            check_val_every_n_epoch=args.val_interval,
+            precision=args.precision,
+            num_sanity_val_steps=args.sanity_batches,
+        )
+    else:
+        trainer = pl.Trainer(
+            max_epochs=args.epochs,
+            deterministic=True,
+            devices=torch.cuda.device_count(),
+            strategy=strategy,
+            accelerator=device_name,
+            logger=logger,
+            log_every_n_steps=1,
+            callbacks=callbacks,
+            check_val_every_n_epoch=args.val_interval,
+            precision=args.precision,
+            num_sanity_val_steps=args.sanity_batches,
+        )
 
     # Only init once, on rank 0 only
     if trainer.global_rank == 0:
@@ -451,11 +491,12 @@ def main():
                     split="test",
                     subsample_step=args.step_length,
                     expanded_test=bool(args.expanded_test),
-                    dataset_path=args.dataset_path
+                    dataset_path=args.dataset_path,
                 ),
                 args.batch_size,
                 shuffle=False,
                 num_workers=args.n_workers,
+                persistent_workers=True,
             )
 
         print(f"Running evaluation on {args.eval}")
@@ -463,7 +504,11 @@ def main():
             print("Saving eval forecasts to zarr")
             assert args.load, "Need to load a model to save forecasts from"
             load_name_cleaned = args.load.replace("/", "_")  # Replace /
-            fc_save_name = f"{args.dataset}-{args.eval}-{load_name_cleaned}"
+            fc_save_name = os.path.join(
+                args.dataset_path,
+                args.dataset + "_forecasts",
+                f"z{args.hidden_dim}_{args.model}",
+            )
             forecast_to_xarr(
                 model,
                 eval_loader,
@@ -483,10 +528,29 @@ def main():
             train_dataloaders=train_loader,
             val_dataloaders=val_loader,
         )
+    if args.wandb_output and trainer.global_rank == 0:
+        run = logger.experiment
+        # Finish the run to ensure logs are written
+        run.finish()
+
+        # Resolve path from symlink
+        latest_run_path = run.dir
+
+        time.sleep(5)
+
+        # New path with custom name
+        new_path = os.path.abspath(args.wandb_output)
+
+        # Move and rename the folder
+        shutil.move(latest_run_path, new_path)
+
+        print(f"Moved run folder to: {new_path}")
 
 
 if __name__ == "__main__":
     main()
+
     torch.cuda.empty_cache()
     import gc
+
     gc.collect()

@@ -1,0 +1,15 @@
+python train_model.py\
+    --name 1980_2022_graphcast_test_3\
+    --dataset global_era5_1980_2022_3deg\
+    --dataset_path $(ws_find neural_lam)/data/data\
+    --model graphcast\
+    --n_workers 4\
+    --n_example_pred 0\
+    --eval_leads 40\
+    --hidden_dim 64\
+    --processor_layers 4\
+    --batch_size 1\
+    --graph global_multilevel_1980_2022\
+    --load trained_models/era5_1980_2022/checkpoints/1980_2022_03/last.ckpt\
+    --periods "train:1980-01-01,2018-12-31;val:2019-01-01,2020-12-31;test:2021-01-01,2022-12-31"\
+    --eval test

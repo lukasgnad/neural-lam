@@ -1,7 +1,8 @@
 #!/bin/bash -x
 #SBATCH --nodes=1
-#SBATCH --time=01:00:00
-#SBATCH --partition=dev_cpuonly
+#SBATCH --time=03:00:00
+#SBATCH --partition=accelerated
+#SBATCH --gres=gpu:4
 #SBATCH --ntasks-per-node=4
 #SBATCH --mem=200gb
 #SBATCH --mail-type="END"
@@ -22,9 +23,14 @@ echo "Tasks per node:   $SLURM_NTASKS_PER_NODE"
 echo "Memory per Node:  $SLURM_MEM_PER_NODE"
 echo "==========================="
 
-dataset=global_era5_1980_2022_3deg
-dataset_path=/hkfs/work/workspace/scratch/xo8179-neural_lam/data/data/
-periods="train:1980-01-01,2018-12-31;val:2019-01-01,2020-12-31;test:2021-01-01,2022-12-31"
+# dataset=global_era5_1980_2022_6h-128x64_equiangular_with_poles_conservative
+dataset=global_1990_2019_equiangular_wp_conservative
+dataset_path=/hkfs/work/workspace/scratch/xo8179-ukesm/
+
+periods="train:1990-01-01,2015-12-31;val:2016-01-01,2017-12-31;test:2018-01-01,2019-12-31"
+# periods="train:2046-01-01,2049-12-31;val:2046-01-01,2049-12-31;test:2046-01-01,2049-12-31"
+
+graph_name="global_multilevel_ukesm_withpoles_conservative"
 
 cd /home/hk-project-pai00005/xo8179/neural_lam_fork/neural-lam
 source venv/bin/activate
@@ -32,23 +38,25 @@ echo "Activated python"
 ml devel/cuda/11.8
 echo "Loaded Cuda"
 
-# python create_global_mesh.py \
-#     --dataset global_era5_1980_2022 \
-#     --dataset_path /hkfs/work/workspace/scratch/xo8179-neural_lam/data/data/ \
-#     --graph global_multilevel_1980_2022 \
-#     --hierarchical 0 \
-#     --splits 4 \
-#     --levels 4 \
+python create_global_mesh.py \
+    --dataset ${dataset} \
+    --dataset_path ${dataset_path} \
+    --graph ${graph_name} \
+    --hierarchical 0 \
+    --splits 4 \
+    --levels 4
 
-# python create_global_grid_features.py \
-#     --dataset global_era5_1980_2022 \
-#     --dataset_path /hkfs/work/workspace/scratch/xo8179-neural_lam/data/data/
+python create_global_grid_features.py \
+    --dataset ${dataset} \
+    --dataset_path ${dataset_path}
 
-# python create_global_forcing.py \
-#     --dataset ${dataset} \
-#     --dataset_path ${dataset_path}
+python create_global_forcing.py \
+    --dataset ${dataset} \
+    --dataset_path ${dataset_path}
 
 python create_parameter_weights.py \
     --dataset ${dataset} \
     --dataset_path ${dataset_path} \
-    --periods ${periods}
+    --periods ${periods} \
+    --n_workers 8 \
+    --dataset_type ukesm

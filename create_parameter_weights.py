@@ -10,7 +10,7 @@ import xarray as xa
 from tqdm import tqdm
 
 # First-party
-from neural_lam import constants # type: ignore
+# from neural_lam import constants # type: ignore
 from neural_lam.era5_dataset import ERA5Dataset
 from neural_lam.weather_dataset import WeatherDataset
 
@@ -19,16 +19,22 @@ DEFAULT_BATCH_SIZE=32
 DEFAULT_LAM_STEP_LENGTH =3
 DEFAULT_N_WORKERS=4
 DEFAULT_DATASET_PATH="data"
+DEFAULT_DATASET_TYPE="nextgems_era5"
 
 def create_parameter_weights(dataset:str=DEFAULT_DATASET, batch_size:int=DEFAULT_BATCH_SIZE,
                              step_length:int=DEFAULT_LAM_STEP_LENGTH, n_workers:int=DEFAULT_N_WORKERS,
-                             dataset_path:str=DEFAULT_DATASET_PATH, periods:str=""):
+                             dataset_path:str=DEFAULT_DATASET_PATH, dataset_type:str='', periods:str=""):
     static_dir_path = os.path.join(dataset_path, dataset, "static")
     if not os.path.exists(static_dir_path):
         os.makedirs(static_dir_path)
     global_ds = "global" in dataset
+    if dataset_type == 'nextgems_era5':
+        from neural_lam import constants # type: ignore
+    elif dataset_type == 'ukesm':
+        from neural_lam import ukesm_constants as constants # type: ignore
 
     if global_ds:
+        
         # Follow approach of GraphCast, giving vertical levels weight
         # proportional to pressure, and hand-design for surface vars
         pres_levels_np = np.array(constants.PRESSURE_LEVELS, dtype=np.float32)
@@ -38,13 +44,22 @@ def create_parameter_weights(dataset:str=DEFAULT_DATASET, batch_size:int=DEFAULT
             pres_levels_norm, len(constants.ATMOSPHERIC_PARAMS)
         )  # (num_atm * num_vert,)
 
-        surface_weights = np.array(
-            [
-                1.0 if var_name == "2t" else 0.1
-                for var_name in constants.SURFACE_PARAMS_SHORT
-            ],
-            dtype=np.float32,
-        )  # (num_surf,)
+        if dataset_type == 'nextgems_era5':
+            surface_weights = np.array(
+                [
+                    1.0 if var_name == "2t" else 0.1
+                    for var_name in constants.SURFACE_PARAMS_SHORT
+                ],
+                dtype=np.float32,
+            )  # (num_surf,)
+        elif dataset_type == 'ukesm':
+            surface_weights = np.array(
+                [
+                    1.0 if var_name == "geopotential_500" else 0.1
+                    for var_name in constants.SURFACE_PARAMS_SHORT
+                ],
+                dtype=np.float32,
+            )  # (num_surf,)
         vert_weights = np.concatenate((atm_weights, surface_weights), axis=0)
         # (num_variables,)
 
@@ -93,7 +108,8 @@ def create_parameter_weights(dataset:str=DEFAULT_DATASET, batch_size:int=DEFAULT
             split="train",
             pred_length=1,  # Use 1 to get each time step only once
             standardize=False,
-            dataset_path=dataset_path
+            dataset_path=dataset_path,
+            dataset_type=dataset_type
         )
     else:
         ds = WeatherDataset(
@@ -157,7 +173,8 @@ def create_parameter_weights(dataset:str=DEFAULT_DATASET, batch_size:int=DEFAULT
             split="train",
             pred_length=1,  # Use 1 to get each time step only once
             standardize=True,
-            dataset_path=dataset_path
+            dataset_path=dataset_path,
+            dataset_type=dataset_type
         )
     else:
         ds_standard = WeatherDataset(
@@ -249,6 +266,12 @@ def main():
         help="The path to the folder containing the dataset (default \'data\')",
     )
     parser.add_argument(
+        "--dataset_type",
+        type=str,
+        default=DEFAULT_DATASET_TYPE,
+        help="Dataset type, either \'nextgems_era5\' or \'ukesm\'",
+    )
+    parser.add_argument(
         "--periods",
         type=str,
         default=None,
@@ -258,7 +281,7 @@ def main():
         )
     )
     args = parser.parse_args()
-    create_parameter_weights(dataset=args.dataset, batch_size=args.batch_size, step_length=args.step_length, n_workers=args.n_workers, dataset_path=args.dataset_path, periods=args.periods)
+    create_parameter_weights(dataset=args.dataset, batch_size=args.batch_size, step_length=args.step_length, n_workers=args.n_workers, dataset_path=args.dataset_path, dataset_type=args.dataset_type,periods=args.periods)
     
 
 

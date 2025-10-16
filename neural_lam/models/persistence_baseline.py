@@ -1,4 +1,5 @@
-from ar_model import ARModel
+from neural_lam.models.ar_model import ARModel
+import torch
 
 class PersistenceBaseline(ARModel):
     
@@ -18,3 +19,49 @@ class PersistenceBaseline(ARModel):
         """
         # Directly return the previous state as the prediction
         return prev_state, None
+    
+        
+    def unroll_prediction(self, init_states, forcing_features, true_states):
+        """
+        Roll out prediction taking multiple autoregressive steps with model
+        init_states: (B, 2, num_grid_nodes, d_f)
+        forcing_features: (B, pred_steps, num_grid_nodes, d_static_f)
+        true_states: (B, pred_steps, num_grid_nodes, d_f)
+        """
+        
+        # prev_prev_state = init_states[:, 0]
+        # prev_state = init_states[:, 1]
+        prediction_list = []
+        pred_std_list = []
+        pred_steps = forcing_features.shape[1]
+
+        for i in range(pred_steps):
+            forcing = forcing_features[:, i]
+            border_state = true_states[:, i]
+
+            pred_state, pred_std = init_states[:, i%4], None
+            # state: (B, num_grid_nodes, d_f)
+            # pred_std: (B, num_grid_nodes, d_f) or None
+
+            # new_state = self.optional_boundary_forcing(pred_state, border_state)
+            new_state = pred_state
+            
+            prediction_list.append(new_state)
+            if self.output_std:
+                pred_std_list.append(pred_std)
+
+            # Update conditioning states
+            # prev_prev_state = prev_state
+            # prev_state = new_state
+
+        prediction = torch.stack(
+            prediction_list, dim=1
+        )  # (B, pred_steps, num_grid_nodes, d_f)
+        if self.output_std:
+            pred_std = torch.stack(
+                pred_std_list, dim=1
+            )  # (B, pred_steps, num_grid_nodes, d_f)
+        else:
+            pred_std = self.per_var_std  # (d_f,)
+
+        return prediction, pred_std

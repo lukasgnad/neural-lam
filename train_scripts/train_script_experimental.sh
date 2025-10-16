@@ -1,10 +1,9 @@
 #!/bin/bash -x
 #SBATCH --nodes=1
-#SBATCH --time=00:10:00
-#SBATCH --gres=gpu:4
-#SBATCH --partition=dev_accelerated
-#SBATCH --ntasks-per-node=4
-#SBATCH --mem=10gb
+#SBATCH --time=01:00:00
+#SBATCH --partition=dev_cpuonly
+#SBATCH --ntasks-per-node=50
+#SBATCH --mem=200gb
 #SBATCH --mail-type="END"
 #SBATCH --mail-user="xo8179@partner.kit.edu"
 #SBATCH --error=out/experimental_error_%j.log
@@ -26,7 +25,7 @@ echo "Tasks per node:   $SLURM_NTASKS_PER_NODE"
 echo "Memory per Node:  $SLURM_MEM_PER_NODE"
 echo "==========================="
 
-source /home/hk-project-pai00005/xo8179/neural_lam_fork/venv/bin/activate
+source /home/hk-project-pai00005/xo8179/neural_lam_fork/neural-lam/venv/bin/activate
 echo "Activated python"
 ml devel/cuda/11.8
 echo "Loaded Cuda"
@@ -37,6 +36,4 @@ echo ""
 echo "----------------------------------------------"
 echo "Running python file"
 
-srun python train_model.py --name example --model graphcast --graph global_multilevel_train002 --ar_steps 1 --eval_leads 1 --n_workers 4 --dataset global_era5_example --epochs 10 --dataset_path /hkfs/work/workspace/scratch/xo8179-neural_lam/data/data/
-
-
+python -u pretraining.py --dataset global_era5_1990_2020_6h-128x64_equiangular_with_poles_conservative --dataset_path /hkfs/work/workspace/scratch/xo8179-neural_lam/data/data/  --graph global_multilevel_era5 --hierarchical 0 --splits 4 --levels 4 --periods "train:1990-01-01,2015-12-31;val:2016-01-01,2017-12-31;test:2018-01-01,2019-12-31" --n_workers 40

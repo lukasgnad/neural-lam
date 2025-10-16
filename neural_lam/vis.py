@@ -110,6 +110,62 @@ def plot_on_axis(
     return im
 
 
+# def plot_on_axis(
+#     ax, data, obs_mask=None, vmin=None, vmax=None, ax_title=None, cmap="plasma"
+# ):
+#     """
+#     Plot weather state on given axis using pcolormesh (seamless for global plots).
+#     """
+#     try:
+#         import numpy as np
+#         import cartopy.crs as ccrs
+
+#         # Reshape data
+#         data_grid = data.reshape(*constants.GRID_SHAPE).cpu().numpy()
+
+#         # Set up masking of border region
+#         if obs_mask is None:
+#             pixel_alpha = 1.0
+#         else:
+#             mask_reshaped = obs_mask.reshape(*constants.GRID_SHAPE)
+#             pixel_alpha = mask_reshaped.clamp(0.7, 1).cpu().numpy()
+
+#         # Set up lats and lons for pcolormesh
+#         lon = np.linspace(
+#             constants.GRID_LIMITS[0],
+#             constants.GRID_LIMITS[1],
+#             constants.GRID_SHAPE[0] + 1,  # +1 to ensure correct grid edges
+#         )
+#         lat = np.linspace(
+#             constants.GRID_LIMITS[2],
+#             constants.GRID_LIMITS[3],
+#             constants.GRID_SHAPE[1] + 1,
+#         )
+#         lon2d, lat2d = np.meshgrid(lon, lat)
+
+#         # Plot
+#         ax.set_global()
+#         ax.coastlines()
+#         im = ax.pcolormesh(
+#             lon2d,
+#             lat2d,
+#             data_grid.T,  # Transpose to match orientation
+#             transform=ccrs.PlateCarree(),
+#             cmap=cmap,
+#             vmin=vmin,
+#             vmax=vmax,
+#             alpha=pixel_alpha,
+#             shading="auto",
+#         )
+
+#         if ax_title:
+#             ax.set_title(ax_title, size=15)
+
+#         return im
+#     except Exception:
+#         return plot_on_axis_old(ax, data, obs_mask,vmin, vmax, ax_title, cmap)
+
+
 @matplotlib.rc_context(utils.fractional_plot_bundle(1))
 def plot_prediction(pred, target, obs_mask=None, title=None, vrange=None):
     """

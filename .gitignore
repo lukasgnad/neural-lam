@@ -11,6 +11,14 @@ saved_forecasts
 paper_checkpoints/
 out/
 
+**/test_runs/*
+**/train_runs/*
+
+**/out/*
+**/logs/*
+**/plots/*
+**/checkpoints/*
+
 ### Python ###
 # Byte-compiled / optimized / DLL files
 __pycache__/

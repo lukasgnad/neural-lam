@@ -13,8 +13,10 @@ import zarr
 import gcsfs
 import xarray as xa
 
+from neural_lam import constants # type: ignore
+
 # First-party
-from neural_lam import constants, utils
+from neural_lam import utils
 
 def parse_periods(periods_str):
     periods = {}
@@ -24,6 +26,40 @@ def parse_periods(periods_str):
         name, dates = period.split(":")
         start, end = dates.split(",")
         periods[name] = slice(start, end)
+    return periods
+
+# FIX for UKESM 360day years
+def parse_periods(periods_str, use_cftime=False):
+    """
+    Parses a string like 'train:1990-01-01,2010-12-30;test:2015-01-01,2019-12-30'
+    into a dict of slices, using either datetime64 or CFTime objects.
+    """
+    periods = {}
+    if periods_str is None:
+        return periods
+
+    for period in periods_str.split(";"):
+        name, dates = period.split(":")
+        start, end = dates.split(",")
+
+        if use_cftime:
+            # Convert to cftime objects safely
+            def safe_cftime(date_str):
+                import cftime
+                y, m, d = map(int, date_str.split("-"))
+                # Clamp day to 30 if needed (for 360-day calendars)
+                d = min(d, 30)
+                return cftime.Datetime360Day(y, m, d)
+
+            start = safe_cftime(start)
+            end = safe_cftime(end)
+        else:
+            # Regular datetime64 timestamps
+            start = np.datetime64(start)
+            end = np.datetime64(end)
+
+        periods[name] = slice(start, end)
+
     return periods
 
 
@@ -40,12 +76,25 @@ class ERA5Dataset(torch.utils.data.Dataset):
         split="train",
         standardize=True,
         dataset_path="data",
+        dataset_type="nextgems_era5",
         **kwarg,  # pylint: disable=unused-argument
     ):
         super().__init__()
 
         assert split in ("train", "val", "test"), "Unknown dataset split"
 
+
+        # if dataset_type == 'nextgems_era5':
+        #     from neural_lam import constants # type: ignore
+        # elif dataset_type == 'ukesm':
+        #     from neural_lam import ukesm_constants as constants # type: ignore
+
+        # full_path = os.path.join(dataset_path, dataset_name)
+        # if 'nextgems' in full_path.lower() or 'era5' in full_path.lower():
+        #     from neural_lam import constants # type: ignore
+        # elif 'ukesm' in full_path.lower():
+        #     from neural_lam import ukesm_constants as constants # type: ignore
+    
         # Open xarrays
         fields_path = os.path.join(dataset_path, dataset_name, "fields.zarr")
         fields_xds = xa.open_zarr(fields_path)
@@ -53,9 +102,10 @@ class ERA5Dataset(torch.utils.data.Dataset):
         forcing_xda = xa.open_dataarray(forcing_path, engine="zarr")
         # each with dims (num_time, num_lon, num_lat)
 
-        # Usage:
-        split_slices = parse_periods(periods)
-        print(split_slices)
+        # FIX for UKESM 360day years
+        use_cftime = not np.issubdtype(fields_xds.time.dtype, np.datetime64)
+        split_slices = parse_periods(periods, use_cftime=use_cftime)
+        # split_slices = parse_periods(periods)
 
         fields_ds_split = fields_xds.sel(time=split_slices[split])
         forcing_ds_split = forcing_xda.sel(time=split_slices[split])
@@ -85,6 +135,7 @@ class ERA5Dataset(torch.utils.data.Dataset):
             self.data_mean = ds_stats["data_mean"]
             self.data_std = ds_stats["data_std"]
 
+        print(fields_ds_split)
         # Turn into directly indexable Dataarrays
         # Fields, in order
         self.atm_xda = (

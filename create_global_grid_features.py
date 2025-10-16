@@ -28,6 +28,7 @@ def create_global_grid_features(dataset:str=DEFAULT_DATASET, plot:int=DEFAULT_PL
     if not os.path.exists(static_dir_path):
         os.makedirs(static_dir_path)
     fields_group_path = os.path.join(dataset_path, dataset, "fields.zarr")
+    print(fields_group_path)
     fields_group = zarr.open(fields_group_path, mode="r")
 
     grid_features_list = []  # Each (num_lon, num_lat) numpy array

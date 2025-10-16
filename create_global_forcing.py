@@ -11,11 +11,12 @@ import torch
 import xarray as xa
 
 # First-party
-from neural_lam import vis # type: ignore
+from neural_lam import vis  # type: ignore
 
-DEFAULT_DATASET="global_example_era5"
+DEFAULT_DATASET = "global_example_era5"
 DEFAULT_DATASET_PATH = "data"
 DEFAULT_PLOT = 0
+
 
 def progress_to_sin_cos(progress):
     """
@@ -26,7 +27,11 @@ def progress_to_sin_cos(progress):
     return prog_sin, prog_cos
 
 
-def create_global_forcing(dataset:str=DEFAULT_DATASET, plot:int=DEFAULT_PLOT, dataset_path:str=DEFAULT_DATASET_PATH):
+def create_global_forcing(
+    dataset: str = DEFAULT_DATASET,
+    plot: int = DEFAULT_PLOT,
+    dataset_path: str = DEFAULT_DATASET_PATH,
+):
     fields_group_path = os.path.join(dataset_path, dataset, "fields.zarr")
     fields_group = xa.open_zarr(fields_group_path)
     forcing_path = os.path.join(dataset_path, dataset, "forcing.zarr")
@@ -127,6 +132,7 @@ def create_global_forcing(dataset:str=DEFAULT_DATASET, plot:int=DEFAULT_PLOT, da
                 )
                 plt.show()
 
+
 def main():
     """
     Pre-compute all static features related to the grid nodes
@@ -149,11 +155,10 @@ def main():
         "--dataset_path",
         type=str,
         default=DEFAULT_DATASET_PATH,
-        help="The path to the folder containing the dataset (default \'data\')",
+        help="The path to the folder containing the dataset (default 'data')",
     )
     args = parser.parse_args()
     create_global_forcing(args.dataset, args.plot, args.dataset_path)
-
 
 
 if __name__ == "__main__":
