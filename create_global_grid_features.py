@@ -10,6 +10,7 @@ import zarr
 
 # First-party
 from neural_lam import vis
+from neural_lam.configs import get_constants
 
 FIELD_NAMES = (
     "cos(lat)",
@@ -19,11 +20,17 @@ FIELD_NAMES = (
     "land-sea-mask",
 )
 
-DEFAULT_DATASET="global_example_era5"
+DEFAULT_DATASET = "global_example_era5"
 DEFAULT_DATASET_PATH = "data"
 DEFAULT_PLOT = 0
 
-def create_global_grid_features(dataset:str=DEFAULT_DATASET, plot:int=DEFAULT_PLOT, dataset_path:str=DEFAULT_DATASET_PATH):
+
+def create_global_grid_features(
+    dataset: str = DEFAULT_DATASET,
+    plot: int = DEFAULT_PLOT,
+    dataset_path: str = DEFAULT_DATASET_PATH,
+    dataset_type="era5",
+):
     static_dir_path = os.path.join(dataset_path, dataset, "static")
     if not os.path.exists(static_dir_path):
         os.makedirs(static_dir_path)
@@ -71,7 +78,7 @@ def create_global_grid_features(dataset:str=DEFAULT_DATASET, plot:int=DEFAULT_PL
         fields_group["land_sea_mask"], dtype=np.float32
     )  # (num_lon, num_lat)
     grid_features_list.append(land_sea_mask)
-    
+
     for x in grid_features_list:
         print(x.shape)
 
@@ -87,10 +94,16 @@ def create_global_grid_features(dataset:str=DEFAULT_DATASET, plot:int=DEFAULT_PL
 
     if plot:
         for feature, field_name in zip(grid_features.T, FIELD_NAMES):
-            vis.plot_prediction(feature, feature, title=field_name)
+            vis.plot_prediction(
+                feature,
+                feature,
+                title=field_name,
+                const=get_constants(dataset_type),
+            )
             plt.show()
 
     torch.save(grid_features, os.path.join(static_dir_path, "grid_features.pt"))
+
 
 def main():
     """
@@ -114,12 +127,26 @@ def main():
         "--dataset_path",
         type=str,
         default=DEFAULT_DATASET_PATH,
-        help="The path to the folder containing the dataset (default \'data\')",
+        help="The path to the folder containing the dataset (default 'data')",
     )
-    args = parser.parse_args()
-    create_global_grid_features(args.dataset, args.plot, args.dataset_path)
+    parser.add_argument(
+        "--dataset_type",
+        type=str,
+        default="era5",
+        help="The type of dataset: era5, nextgems, ukesm",
+    )
 
-    
+    args = parser.parse_args()
+
+    # Asserts for arguments
+    assert args.dataset_type in (
+        "era5",
+        "nextgems",
+        "ukesm",
+    ), f"Unknown dataset type: {args.dataset_type}"
+    create_global_grid_features(
+        args.dataset, args.plot, args.dataset_path, args.dataset_type
+    )
 
 
 if __name__ == "__main__":

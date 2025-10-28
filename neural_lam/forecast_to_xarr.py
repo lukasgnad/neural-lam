@@ -8,7 +8,7 @@ import xarray as xa
 from tqdm import tqdm
 
 # First-party
-from neural_lam import constants
+from neural_lam.configs import get_constants
 from neural_lam.models.graph_efm import GraphEFM
 
 FC_DIR_PATH = "saved_forecasts"
@@ -46,6 +46,7 @@ def forecast_to_xds(
     var_filter_list,
     level_filter_list,
     time_enc_unit,
+    C,
 ):
     """
     Turn a pytorch tensor representing a forecast into a saveable xarray.Dataset
@@ -63,7 +64,7 @@ def forecast_to_xds(
     # Note: this reshape works with or without S-dimension
     full_fc_grid = full_fc.reshape(
         *full_fc.shape[:-2],
-        *constants.GRID_SHAPE,
+        *C.GRID_SHAPE,
         full_fc.shape[-1],
     )  # (B, (S), pred_steps, num_lon, num_lat, d_f)
 
@@ -71,28 +72,28 @@ def forecast_to_xds(
         # Transpose first dimensions, so they are (realization, time, ...)
         full_fc_grid = np.moveaxis(full_fc_grid, 1, 0)
 
-    fc_sur = full_fc_grid[..., -len(constants.SURFACE_PARAMS) :]
+    fc_sur = full_fc_grid[..., -len(C.SURFACE_PARAMS) :]
     # (..., num_sur_vars)
-    fc_atm = full_fc_grid[..., : -len(constants.SURFACE_PARAMS)]
+    fc_atm = full_fc_grid[..., : -len(C.SURFACE_PARAMS)]
     # (..., num_atm_vars * num_levels)
 
-    fc_sur_list = np.split(fc_sur, len(constants.SURFACE_PARAMS), axis=-1)
+    fc_sur_list = np.split(fc_sur, len(C.SURFACE_PARAMS), axis=-1)
     fc_sur_list = [fc.squeeze(-1) for fc in fc_sur_list]
     # list of ((S), B, pred_steps, num_lon, num_lat)
 
-    fc_atm_list = np.split(fc_atm, len(constants.ATMOSPHERIC_PARAMS), axis=-1)
+    fc_atm_list = np.split(fc_atm, len(C.ATMOSPHERIC_PARAMS), axis=-1)
     # list of ((S), B, pred_steps, num_lon, num_lat, num_levels)
 
     # Turn whole forecast into xr.Dataset
     atm_dims, sur_dims = get_var_dims(save_ensemble)
     fc_var_dict = dict(
         zip(
-            constants.ATMOSPHERIC_PARAMS,
+            C.ATMOSPHERIC_PARAMS,
             ((atm_dims, var_vals) for var_vals in fc_atm_list),
         )
     ) | dict(
         zip(
-            constants.SURFACE_PARAMS,
+            C.SURFACE_PARAMS,
             ((sur_dims, var_vals) for var_vals in fc_sur_list),
         )
     )
@@ -135,7 +136,7 @@ def forecast_to_xds(
     return filtered_batch_xds
 
 
-def parse_filters(var_filter_str, level_filter_str):
+def parse_filters(var_filter_str, level_filter_str, C):
     """
     Parse and check correctness of variable and level filters given as strings.
     """
@@ -151,17 +152,13 @@ def parse_filters(var_filter_str, level_filter_str):
         # Check that all variables are forecasted
         for var_str in var_list_short:
             assert (
-                var_str in constants.ATMOSPHERIC_PARAMS_SHORT
-                or var_str in constants.SURFACE_PARAMS_SHORT
+                var_str in C.ATMOSPHERIC_PARAMS_SHORT
+                or var_str in C.SURFACE_PARAMS_SHORT
             ), f"Can not save unknown variable: {var_str}"
 
         param_name_lookup = dict(
-            zip(constants.SURFACE_PARAMS_SHORT, constants.SURFACE_PARAMS)
-        ) | dict(
-            zip(
-                constants.ATMOSPHERIC_PARAMS_SHORT, constants.ATMOSPHERIC_PARAMS
-            )
-        )
+            zip(C.SURFACE_PARAMS_SHORT, C.SURFACE_PARAMS)
+        ) | dict(zip(C.ATMOSPHERIC_PARAMS_SHORT, C.ATMOSPHERIC_PARAMS))
         var_list = [
             param_name_lookup[short_name] for short_name in var_list_short
         ]
@@ -175,7 +172,7 @@ def parse_filters(var_filter_str, level_filter_str):
         ]
         for level in level_list:
             assert (
-                level in constants.PRESSURE_LEVELS
+                level in C.PRESSURE_LEVELS
             ), f"Can not save unknown pressure level: {level}"
 
     return var_list, level_list
@@ -204,6 +201,7 @@ def forecast_to_xarr(
     var_filter=None,
     level_filter=None,
     ens_size=5,
+    dataset_type="era5",
 ):
     """
     Produce forecasts for each sample in the data_loader, using model
@@ -215,8 +213,12 @@ def forecast_to_xarr(
     var_filter: string, comma-separated list of variables to save,
         or None to save all
     """
+    C = get_constants(dataset_type)
+
     # Parse var_filter
-    var_filter_list, level_filter_list = parse_filters(var_filter, level_filter)
+    var_filter_list, level_filter_list = parse_filters(
+        var_filter, level_filter, C
+    )
 
     # Set up device, need to handle manually here
     device = torch.device(device_name)
@@ -246,13 +248,13 @@ def forecast_to_xarr(
     atm_empty_shape = (
         0,
         dataset.pred_length,
-        *constants.GRID_SHAPE,
-        len(constants.PRESSURE_LEVELS),
+        *C.GRID_SHAPE,
+        len(C.PRESSURE_LEVELS),
     )
     sur_empty_shape = (
         0,
         dataset.pred_length,
-        *constants.GRID_SHAPE,
+        *C.GRID_SHAPE,
     )
     ds_coords = {
         "time": np.array([], dtype="datetime64[ns]"),
@@ -274,14 +276,14 @@ def forecast_to_xarr(
                 atm_dims,
                 np.zeros(atm_empty_shape),
             )
-            for var_name in constants.ATMOSPHERIC_PARAMS
+            for var_name in C.ATMOSPHERIC_PARAMS
         }
         | {  # Dict union
             var_name: (
                 sur_dims,
                 np.zeros(sur_empty_shape),
             )
-            for var_name in constants.SURFACE_PARAMS
+            for var_name in C.SURFACE_PARAMS
         },
         coords=ds_coords,
     )
@@ -323,7 +325,7 @@ def forecast_to_xarr(
         [
             (
                 (v, {"chunks": atm_chunking})
-                if v in constants.ATMOSPHERIC_PARAMS + ["wind_speed"]
+                if v in C.ATMOSPHERIC_PARAMS + ["wind_speed"]
                 else (v, {"chunks": sur_chunking})
             )
             for v in filtered_xds
@@ -375,6 +377,7 @@ def forecast_to_xarr(
             var_filter_list,
             level_filter_list,
             time_enc_unit,
+            C,
         )
 
         # Save to existing zarr using append_dim="time"

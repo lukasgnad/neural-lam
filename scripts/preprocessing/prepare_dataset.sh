@@ -24,7 +24,7 @@ echo "Memory per Node:  $SLURM_MEM_PER_NODE"
 echo "==========================="
 
 # dataset=global_era5_1980_2022_6h-128x64_equiangular_with_poles_conservative
-dataset=global_nextgems_2046_2049_equiangular_with_poles_conservative
+dataset=global_1985_2014_equiangular_wp_conservative_40_chunks
 dataset_path=/hkfs/work/workspace/scratch/xo8179-neural_lam/data/data/
 
 # periods="train:1980-01-01,2016-12-31;val:2017-01-01,2019-12-31;test:2020-01-01,2022-12-31"

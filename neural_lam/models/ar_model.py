@@ -9,7 +9,8 @@ import torch
 import wandb
 
 # First-party
-from neural_lam import constants, metrics, utils, vis
+from neural_lam import metrics, utils, vis
+from neural_lam.configs import get_constants
 
 
 class ARModel(pl.LightningModule):
@@ -25,9 +26,12 @@ class ARModel(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters()
         self.lr = args.lr
+        self.constants = get_constants(args.dataset_type)
 
         # Load static features for grid/data
-        static_data_dict = utils.load_static_data(args.dataset, args.dataset_path)
+        static_data_dict = utils.load_static_data(
+            args.dataset, args.dataset_path
+        )
         for static_data_name, static_data_tensor in static_data_dict.items():
             self.register_buffer(
                 static_data_name, static_data_tensor, persistent=False
@@ -37,11 +41,11 @@ class ARModel(pl.LightningModule):
         self.output_std = bool(args.output_std)
         if self.output_std:
             self.grid_output_dim = (
-                2 * constants.GRID_STATE_DIM
+                2 * self.constants.GRID_STATE_DIM
             )  # Pred. dim. in grid cell
         else:
             self.grid_output_dim = (
-                constants.GRID_STATE_DIM
+                self.constants.GRID_STATE_DIM
             )  # Pred. dim. in grid cell
 
             # Store constant per-variable std.-dev. weighting
@@ -59,9 +63,9 @@ class ARModel(pl.LightningModule):
             grid_static_dim,
         ) = self.grid_static_features.shape  # 63784 = 268x238
         self.grid_dim = (
-            2 * constants.GRID_STATE_DIM
+            2 * self.constants.GRID_STATE_DIM
             + grid_static_dim
-            + constants.GRID_FORCING_DIM
+            + self.constants.GRID_FORCING_DIM
         )
 
         # Instantiate loss function
@@ -92,12 +96,12 @@ class ARModel(pl.LightningModule):
             self.test_metrics["output_std"] = []  # Treat as metric
 
         # Do not try to log at lead times not forecasted
-        self.val_log_leads = constants.VAL_STEP_LOG_ERRORS[
-            constants.VAL_STEP_LOG_ERRORS <= args.eval_leads
+        self.val_log_leads = self.constants.VAL_STEP_LOG_ERRORS[
+            self.constants.VAL_STEP_LOG_ERRORS <= args.eval_leads
         ]
         self.val_plot_vars = {
             var_i: ts[ts <= args.eval_leads]
-            for var_i, ts in constants.VAL_PLOT_VARS.items()
+            for var_i, ts in self.constants.VAL_PLOT_VARS.items()
         }
         self.eval_leads = args.eval_leads
 
@@ -441,8 +445,8 @@ class ARModel(pl.LightningModule):
             ):
                 # Create one figure per variable at this time step
                 var_names = [
-                    constants.PARAM_NAMES_SHORT[var_i]
-                    for var_i in constants.EVAL_PLOT_VARS
+                    self.constants.PARAM_NAMES_SHORT[var_i]
+                    for var_i in self.constants.EVAL_PLOT_VARS
                 ]
                 var_figs = [
                     vis.plot_prediction(
@@ -451,13 +455,14 @@ class ARModel(pl.LightningModule):
                         self.interior_mask[:, 0],
                         title=(
                             f"{var_name} "
-                            f"({constants.PARAM_UNITS[var_i]}), "
+                            f"({self.constants.PARAM_UNITS[var_i]}), "
                             f"t={t_i} ({self.step_length*t_i} h)"
                         ),
                         vrange=var_vranges[var_i],
+                        const=self.constants,
                     )
                     for var_i, var_name in zip(
-                        constants.EVAL_PLOT_VARS, var_names
+                        self.constants.EVAL_PLOT_VARS, var_names
                     )
                 ]
 
@@ -500,7 +505,7 @@ class ARModel(pl.LightningModule):
         """
         print("Creating metric log dict")
         log_dict = {}
-        metric_fig = vis.plot_error_map(metric_tensor)
+        metric_fig = vis.plot_error_map(metric_tensor, const=self.constants)
         full_log_name = f"{prefix}_{metric_name}"
         log_dict[full_log_name] = wandb.Image(metric_fig)
 
@@ -520,9 +525,12 @@ class ARModel(pl.LightningModule):
             )
 
         # Check if metrics are watched, log exact values for specific vars
-        if full_log_name in constants.METRICS_WATCH:
-            for var_i, timesteps in constants.VAR_LEADS_METRICS_WATCH.items():
-                var = constants.PARAM_NAMES_SHORT[var_i]
+        if full_log_name in self.constants.METRICS_WATCH:
+            for (
+                var_i,
+                timesteps,
+            ) in self.constants.VAR_LEADS_METRICS_WATCH.items():
+                var = self.constants.PARAM_NAMES_SHORT[var_i]
                 log_dict.update(
                     {
                         f"{full_log_name}_{var}_step_{step}": metric_tensor[
@@ -596,6 +604,7 @@ class ARModel(pl.LightningModule):
                     loss_map,
                     self.interior_mask[:, 0],
                     title=f"Test loss, t={t_i} ({self.step_length*t_i} h)",
+                    const=self.constants,
                 )
                 for t_i, loss_map in zip(self.val_log_leads, mean_spatial_loss)
             ]
@@ -606,7 +615,9 @@ class ARModel(pl.LightningModule):
 
             # also make without title and save as pdf
             pdf_loss_map_figs = [
-                vis.plot_spatial_error(loss_map, self.interior_mask[:, 0])
+                vis.plot_spatial_error(
+                    loss_map, self.interior_mask[:, 0], const=self.constants
+                )
                 for loss_map in mean_spatial_loss
             ]
             pdf_loss_maps_dir = os.path.join(wandb.run.dir, "spatial_loss_maps")

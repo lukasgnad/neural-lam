@@ -1,8 +1,7 @@
 #!/bin/bash -x
 #SBATCH --nodes=1
 #SBATCH --time=03:00:00
-#SBATCH --partition=accelerated
-#SBATCH --gres=gpu:4
+#SBATCH --partition=dev_cpuonly
 #SBATCH --ntasks-per-node=4
 #SBATCH --mem=200gb
 #SBATCH --mail-type="END"
@@ -24,10 +23,11 @@ echo "Memory per Node:  $SLURM_MEM_PER_NODE"
 echo "==========================="
 
 # dataset=global_era5_1980_2022_6h-128x64_equiangular_with_poles_conservative
-dataset=global_1990_2019_equiangular_wp_conservative
+# dataset=global_1990_2019_equiangular_wp_conservative
+dataset=global_1985_2014_equiangular_wp_conservative_40_chunks
 dataset_path=/hkfs/work/workspace/scratch/xo8179-ukesm/
 
-periods="train:1990-01-01,2015-12-31;val:2016-01-01,2017-12-31;test:2018-01-01,2019-12-31"
+periods="train:1985-01-01,2010-12-31;val:2011-01-01,2012-12-31;test:2011-01-01,2014-12-31"
 # periods="train:2046-01-01,2049-12-31;val:2046-01-01,2049-12-31;test:2046-01-01,2049-12-31"
 
 graph_name="global_multilevel_ukesm_withpoles_conservative"
@@ -50,13 +50,15 @@ python create_global_grid_features.py \
     --dataset ${dataset} \
     --dataset_path ${dataset_path}
 
-python create_global_forcing.py \
+# python create_global_forcing.py \
+python create_global_forcing_stable.py \
     --dataset ${dataset} \
-    --dataset_path ${dataset_path}
+    --dataset_path ${dataset_path} \
+    --dataset_type ukesm
 
 python create_parameter_weights.py \
     --dataset ${dataset} \
     --dataset_path ${dataset_path} \
     --periods ${periods} \
-    --n_workers 8 \
+    --n_workers 16 \
     --dataset_type ukesm

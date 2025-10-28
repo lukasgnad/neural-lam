@@ -4,7 +4,7 @@ import torch
 import wandb
 
 # First-party
-from neural_lam import constants, utils, vis
+from neural_lam import utils, vis
 from neural_lam.interaction_net import InteractionNet, PropagationNet
 from neural_lam.models.ar_model import ARModel
 
@@ -210,8 +210,8 @@ class BaseGraphModel(ARModel):
             ):
 
                 for var_i, timesteps in self.val_plot_vars.items():
-                    var_name = constants.PARAM_NAMES_SHORT[var_i]
-                    var_unit = constants.PARAM_UNITS[var_i]
+                    var_name = self.constants.PARAM_NAMES_SHORT[var_i]
+                    var_unit = self.constants.PARAM_UNITS[var_i]
                     for step in timesteps:
                         pred_state = pred_traj[step - 1, :, var_i]
                         target_state = target_traj[step - 1, :, var_i]
@@ -229,6 +229,7 @@ class BaseGraphModel(ARModel):
                             target_state,
                             self.interior_mask[:, 0],
                             title=plot_title,
+                            const=self.constants,
                         )
 
             if not self.trainer.sanity_checking:

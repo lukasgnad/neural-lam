@@ -1,7 +1,7 @@
 """
 This is an extension to the solar radiation script defined in the GraphCast Repository:
 https://github.com/google-deepmind/graphcast/blob/main/graphcast/solar_radiation.py
-The goal of this extension is to enable the solar radiation calculation for datasets
+This extension is implemented to enable the solar radiation calculation for datasets
 with 360Day datetime timestamps (e.g. the UKESM dataset)
 
 Computes TOA incident solar radiation compatible with ERA5.
@@ -34,7 +34,15 @@ def get_tsi(timestamps, tsi_data):
 
     if isinstance(timestamps[0], cftime.Datetime360Day):
         fractional_year = np.array(
-            [t.year + (t.dayofyr - 1) / 360.0 for t in timestamps]
+            [
+                t.year
+                + (
+                    (t.dayofyr - 1)
+                    + (t.hour + t.minute / 60 + t.second / 3600) / 24
+                )
+                / 360.0
+                for t in timestamps
+            ]
         )
     else:
         timestamps = pd.DatetimeIndex(timestamps)
@@ -63,7 +71,7 @@ def _convert_to_j2000_days(timestamp) -> float:
         day_of_year = (timestamp - year_start).days
         fractional_year = timestamp.year + day_of_year / 360.0
         # Convert fractional year to days since J2000 epoch (approx)
-        day = int((fractional_year - 2000.0) * 365.25)
+        day = int((fractional_year - 2000.0) * 365.24219)
         # To not influence the progress of the current day,
         # the fractional year has to be rounded after multiplication
 

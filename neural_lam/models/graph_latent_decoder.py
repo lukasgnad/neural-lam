@@ -22,8 +22,15 @@ class GraphLatentDecoder(BaseGraphLatentDecoder):
         processor_layers,
         hidden_layers=1,
         output_std=True,
+        const=None,
     ):
-        super().__init__(hidden_dim, latent_dim, hidden_layers, output_std)
+        super().__init__(
+            hidden_dim,
+            latent_dim,
+            hidden_layers,
+            output_std,
+            constants=const,
+        )
 
         # GNN from grid to mesh
         self.g2m_gnn = InteractionNet(

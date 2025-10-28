@@ -1,4 +1,5 @@
 # Standard library
+from enum import Enum
 import random
 import time
 from argparse import ArgumentParser
@@ -12,7 +13,8 @@ import shutil
 import os
 
 # First-party
-from neural_lam import constants, utils
+from neural_lam import utils
+from neural_lam.configs import get_constants
 from neural_lam.era5_dataset import ERA5Dataset
 from neural_lam.era5_dataset_persistence import ERA5PersistenceDataset
 from neural_lam.forecast_to_xarr import forecast_to_xarr
@@ -32,6 +34,12 @@ MODELS = {
     "persistence": PersistenceBaseline,
     "persistence_simple": PersistenceBaselineSimple,
 }
+
+
+class RUN_TYPE(Enum):
+    TRAIN = 0
+    TEST = 1
+    EVAL = 2
 
 
 def main():
@@ -321,16 +329,38 @@ def main():
         default=None,
         help="Output folder ",
     )
+    parser.add_argument(
+        "--dataset_type",
+        type=str,
+        default="era5",
+        help="The type of dataset: era5, nextgems, ukesm",
+    )
 
     args = parser.parse_args()
 
     # Asserts for arguments
+    assert args.dataset_type in (
+        "era5",
+        "nextgems",
+        "ukesm",
+    ), f"Unknown dataset type: {args.dataset_type}"
+
+    C = get_constants(args.dataset_type)
+
     assert args.model in MODELS, f"Unknown model: {args.model}"
     assert args.eval in (
         None,
         "val",
         "test",
     ), f"Unknown eval setting: {args.eval}"
+
+    if args.eval:
+        if args.eval == "val":
+            current_run = RUN_TYPE.EVAL
+        else:
+            current_run = RUN_TYPE.TEST
+    else:
+        current_run = RUN_TYPE.TRAIN
 
     # Get an (actual) random run id as a unique identifier
     random_run_id = random.randint(0, 9999)
@@ -344,7 +374,7 @@ def main():
     else:
         ds_class = ERA5Dataset
 
-    if not args.eval:
+    if current_run == RUN_TYPE.TRAIN:
         train_loader = torch.utils.data.DataLoader(
             ds_class(
                 args.dataset,
@@ -354,6 +384,7 @@ def main():
                 subsample_step=args.step_length,
                 dataset_path=args.dataset_path,
                 pin_memory=True,
+                dataset_type=args.dataset_type,
             ),
             args.batch_size,
             shuffle=True,
@@ -368,6 +399,7 @@ def main():
             split="val",
             subsample_step=args.step_length,
             dataset_path=args.dataset_path,
+            dataset_type=args.dataset_type,
         ),
         args.batch_size,
         shuffle=False,
@@ -397,7 +429,7 @@ def main():
         model = model_class(args)
 
     prefix = ""
-    if args.eval:
+    if current_run == RUN_TYPE.EVAL:
         prefix = f"eval-{args.eval}-"
     if args.name:
         run_name = args.name
@@ -420,8 +452,8 @@ def main():
     )
     # Save checkpoints for minimum loss at specific lead times
     # Only include lead times actually forecasted
-    checkpoint_times = constants.VAL_STEP_CHECKPOINTS[
-        constants.VAL_STEP_CHECKPOINTS <= args.eval_leads
+    checkpoint_times = C.VAL_STEP_CHECKPOINTS[
+        C.VAL_STEP_CHECKPOINTS <= args.eval_leads
     ]
     for unroll_time in checkpoint_times:
         metric_name = f"val_loss_unroll{unroll_time}"
@@ -434,7 +466,7 @@ def main():
             )
         )
     logger = pl.loggers.WandbLogger(
-        project=constants.WANDB_PROJECT, name=run_name, config=args
+        project=C.WANDB_PROJECT, name=run_name, config=args
     )
 
     run = logger.experiment
@@ -445,44 +477,41 @@ def main():
     # If doing pure autoencoder training (kl_beta = 0), the prior network is not
     # used at all in producing the loss. This is desired, but DDP complains.
     strategy = "ddp" if args.kl_beta > 0 else "ddp_find_unused_parameters_true"
+    num_devices = (
+        1 if current_run == RUN_TYPE.TEST else torch.cuda.device_count()
+    )
+    print(f"Starting with {num_devices} devices")
 
-    if args.eval and not args.eval == "val":
-        trainer = pl.Trainer(
-            max_epochs=args.epochs,
-            deterministic=True,
-            devices=torch.cuda.device_count(),
-            strategy=strategy,
-            accelerator=device_name,
-            logger=logger,
-            log_every_n_steps=1,
-            callbacks=callbacks,
-            check_val_every_n_epoch=args.val_interval,
-            precision=args.precision,
-            num_sanity_val_steps=args.sanity_batches,
-        )
-    else:
-        trainer = pl.Trainer(
-            max_epochs=args.epochs,
-            deterministic=True,
-            devices=torch.cuda.device_count(),
-            strategy=strategy,
-            accelerator=device_name,
-            logger=logger,
-            log_every_n_steps=1,
-            callbacks=callbacks,
-            check_val_every_n_epoch=args.val_interval,
-            precision=args.precision,
-            num_sanity_val_steps=args.sanity_batches,
-        )
+    trainer = pl.Trainer(
+        max_epochs=args.epochs,
+        deterministic=True,
+        devices=num_devices,
+        strategy=strategy,
+        accelerator=device_name,
+        logger=logger,
+        log_every_n_steps=1,
+        callbacks=callbacks,
+        check_val_every_n_epoch=args.val_interval,
+        precision=args.precision,
+        num_sanity_val_steps=args.sanity_batches,
+    )
 
     # Only init once, on rank 0 only
     if trainer.global_rank == 0:
-        utils.init_wandb_metrics(logger)  # Do after wandb.init
+        utils.init_wandb_metrics(logger, const=C)  # Do after wandb.init
+        print(C.summary())
 
-    if args.eval:
-        if args.eval == "val":
+    if current_run == RUN_TYPE.TRAIN:
+        # Train model
+        trainer.fit(
+            model=model,
+            train_dataloaders=train_loader,
+            val_dataloaders=val_loader,
+        )
+    else:
+        if current_run == RUN_TYPE.EVAL:
             eval_loader = val_loader
-        else:  # Test
+        elif current_run == RUN_TYPE.TEST:
             eval_loader = torch.utils.data.DataLoader(
                 ds_class(
                     args.dataset,
@@ -492,23 +521,24 @@ def main():
                     subsample_step=args.step_length,
                     expanded_test=bool(args.expanded_test),
                     dataset_path=args.dataset_path,
+                    dataset_type=args.dataset_type,
                 ),
                 args.batch_size,
                 shuffle=False,
                 num_workers=args.n_workers,
                 persistent_workers=True,
             )
-
+            print(f"Evaluating {len(eval_loader)} entries")
         print(f"Running evaluation on {args.eval}")
+
         if args.save_forecasts:
-            print("Saving eval forecasts to zarr")
             assert args.load, "Need to load a model to save forecasts from"
-            load_name_cleaned = args.load.replace("/", "_")  # Replace /
             fc_save_name = os.path.join(
                 args.dataset_path,
                 args.dataset + "_forecasts",
                 f"z{args.hidden_dim}_{args.model}",
             )
+            print(f"Saving eval forecasts to zarr: {fc_save_name}")
             forecast_to_xarr(
                 model,
                 eval_loader,
@@ -517,30 +547,22 @@ def main():
                 var_filter=args.save_vars,
                 level_filter=args.save_levels,
                 ens_size=args.ensemble_size,
+                dataset_type=args.dataset_type,
             )
             print("Forecasts saved")
         else:
             trainer.test(model=model, dataloaders=eval_loader)
-    else:
-        # Train model
-        trainer.fit(
-            model=model,
-            train_dataloaders=train_loader,
-            val_dataloaders=val_loader,
-        )
+
     if args.wandb_output and trainer.global_rank == 0:
         run = logger.experiment
         # Finish the run to ensure logs are written
         run.finish()
-
-        # Resolve path from symlink
+        # Get current path
         latest_run_path = run.dir
-
         time.sleep(5)
 
         # New path with custom name
         new_path = os.path.abspath(args.wandb_output)
-
         # Move and rename the folder
         shutil.move(latest_run_path, new_path)
 

@@ -25,7 +25,8 @@ MODELS = {
     "graph_efm": GraphEFM,
 }
 
-DEFAULT_ZARR="weatherbench2/datasets/era5/1959-2023_01_10-6h-240x121_equiangular_with_poles_conservative.zarr"
+DEFAULT_ZARR = "weatherbench2/datasets/era5/1959-2023_01_10-6h-240x121_equiangular_with_poles_conservative.zarr"
+
 
 def main():
     """
@@ -44,16 +45,13 @@ def main():
         "(default: meps_example)",
     )
     parser.add_argument(
-        "--zarr_path",
-        type=str,
-        default=DEFAULT_ZARR,
-        help="Zarr online path"
+        "--zarr_path", type=str, default=DEFAULT_ZARR, help="Zarr online path"
     )
     parser.add_argument(
         "--dataset_path",
         type=str,
         default="data",
-        help="The path to the folder containing the dataset (default \'data\')",
+        help="The path to the folder containing the dataset (default 'data')",
     )
     parser.add_argument(
         "--model",
@@ -306,8 +304,7 @@ def main():
         help="Name for the stored model checkpoints",
     )
     args = parser.parse_args()
-    
-    
+
     # Asserts for arguments
     assert args.model in MODELS, f"Unknown model: {args.model}"
     assert args.eval in (
@@ -335,7 +332,7 @@ def main():
             pred_length=args.ar_steps,
             split="train",
             subsample_step=args.step_length,
-            dataset_path=args.dataset_path
+            dataset_path=args.dataset_path,
         ),
         args.batch_size,
         shuffle=True,
@@ -350,7 +347,7 @@ def main():
             pred_length=args.eval_leads,
             split="val",
             subsample_step=args.step_length,
-            dataset_path=args.dataset_path
+            dataset_path=args.dataset_path,
         ),
         args.batch_size,
         shuffle=False,
@@ -440,7 +437,7 @@ def main():
 
     # Only init once, on rank 0 only
     if trainer.global_rank == 0:
-        utils.init_wandb_metrics(logger)  # Do after wandb.init
+        utils.init_wandb_metrics(logger, const=constants)  # Do after wandb.init
 
     if args.eval:
         if args.eval == "val":
@@ -453,13 +450,13 @@ def main():
                     split="test",
                     subsample_step=args.step_length,
                     expanded_test=bool(args.expanded_test),
-                    dataset_path=args.dataset_path
+                    dataset_path=args.dataset_path,
                 ),
                 args.batch_size,
                 shuffle=False,
                 num_workers=args.n_workers,
             )
-        
+
         print(f"Running evaluation on {args.eval}")
         if args.save_forecasts:
             print("Saving eval forecasts to zarr")
@@ -477,7 +474,7 @@ def main():
             )
             print("Forecasts saved")
         else:
-            
+
             trainer.test(model=model, dataloaders=eval_loader)
     else:
         # Train model

@@ -13,10 +13,11 @@ import zarr
 import gcsfs
 import xarray as xa
 
-from neural_lam import constants # type: ignore
+from neural_lam.configs import get_constants  # type: ignore
 
 # First-party
 from neural_lam import utils
+
 
 def parse_periods(periods_str):
     periods = {}
@@ -27,6 +28,7 @@ def parse_periods(periods_str):
         start, end = dates.split(",")
         periods[name] = slice(start, end)
     return periods
+
 
 # FIX for UKESM 360day years
 def parse_periods(periods_str, use_cftime=False):
@@ -44,15 +46,18 @@ def parse_periods(periods_str, use_cftime=False):
 
         if use_cftime:
             # Convert to cftime objects safely
-            def safe_cftime(date_str):
+            def safe_cftime(date_str, is_end=False):
                 import cftime
+
                 y, m, d = map(int, date_str.split("-"))
                 # Clamp day to 30 if needed (for 360-day calendars)
                 d = min(d, 30)
+                if is_end:
+                    return cftime.Datetime360Day(y, m, d, 23)
                 return cftime.Datetime360Day(y, m, d)
 
             start = safe_cftime(start)
-            end = safe_cftime(end)
+            end = safe_cftime(end, True)
         else:
             # Regular datetime64 timestamps
             start = np.datetime64(start)
@@ -76,25 +81,15 @@ class ERA5Dataset(torch.utils.data.Dataset):
         split="train",
         standardize=True,
         dataset_path="data",
-        dataset_type="nextgems_era5",
+        dataset_type="era5",
         **kwarg,  # pylint: disable=unused-argument
     ):
         super().__init__()
 
         assert split in ("train", "val", "test"), "Unknown dataset split"
 
+        C = get_constants(dataset_type)
 
-        # if dataset_type == 'nextgems_era5':
-        #     from neural_lam import constants # type: ignore
-        # elif dataset_type == 'ukesm':
-        #     from neural_lam import ukesm_constants as constants # type: ignore
-
-        # full_path = os.path.join(dataset_path, dataset_name)
-        # if 'nextgems' in full_path.lower() or 'era5' in full_path.lower():
-        #     from neural_lam import constants # type: ignore
-        # elif 'ukesm' in full_path.lower():
-        #     from neural_lam import ukesm_constants as constants # type: ignore
-    
         # Open xarrays
         fields_path = os.path.join(dataset_path, dataset_name, "fields.zarr")
         fields_xds = xa.open_zarr(fields_path)
@@ -113,7 +108,7 @@ class ERA5Dataset(torch.utils.data.Dataset):
         # Compute dataset length
         timesteps_in_split = len(fields_ds_split.coords["time"])
         self.pred_length = pred_length
-        
+
         # -1 for AR-2, - pred_length for target states
         ds_timesteps = timesteps_in_split - 1 - pred_length
         assert ds_timesteps > 0, "Dataset too small for given pred_length"
@@ -129,22 +124,23 @@ class ERA5Dataset(torch.utils.data.Dataset):
         # Set up for standardization
         self.standardize = standardize
         if standardize:
-            ds_stats = utils.load_dataset_stats(dataset_name, dataset_path, "cpu")
+            ds_stats = utils.load_dataset_stats(
+                dataset_name, dataset_path, "cpu"
+            )
 
             # These are torch arrays
             self.data_mean = ds_stats["data_mean"]
             self.data_std = ds_stats["data_std"]
 
-        print(fields_ds_split)
         # Turn into directly indexable Dataarrays
         # Fields, in order
         self.atm_xda = (
-            fields_ds_split[constants.ATMOSPHERIC_PARAMS]
+            fields_ds_split[C.ATMOSPHERIC_PARAMS]
             .to_dataarray("state_var")
             .transpose("time", "longitude", "latitude", "state_var", "level")
         )
         self.surface_xda = (
-            fields_ds_split[constants.SURFACE_PARAMS]
+            fields_ds_split[C.SURFACE_PARAMS]
             .to_dataarray("state_var")
             .transpose("time", "longitude", "latitude", "state_var")
         )

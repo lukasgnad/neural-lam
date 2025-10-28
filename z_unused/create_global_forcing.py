@@ -12,6 +12,7 @@ import xarray as xa
 
 # First-party
 from neural_lam import vis  # type: ignore
+from neural_lam.configs import get_constants
 
 DEFAULT_DATASET = "global_example_era5"
 DEFAULT_DATASET_PATH = "data"
@@ -31,6 +32,7 @@ def create_global_forcing(
     dataset: str = DEFAULT_DATASET,
     plot: int = DEFAULT_PLOT,
     dataset_path: str = DEFAULT_DATASET_PATH,
+    dataset_type="era5",
 ):
     fields_group_path = os.path.join(dataset_path, dataset, "fields.zarr")
     fields_group = xa.open_zarr(fields_group_path)
@@ -129,6 +131,7 @@ def create_global_forcing(
                     forcing_field,
                     forcing_field,
                     title=f"{timestamp} UTC, {var_name}",
+                    const=get_constants(dataset_type),
                 )
                 plt.show()
 
@@ -157,8 +160,24 @@ def main():
         default=DEFAULT_DATASET_PATH,
         help="The path to the folder containing the dataset (default 'data')",
     )
+    parser.add_argument(
+        "--dataset_type",
+        type=str,
+        default="era5",
+        help="The type of dataset: era5, nextgems, ukesm",
+    )
+
     args = parser.parse_args()
-    create_global_forcing(args.dataset, args.plot, args.dataset_path)
+
+    # Asserts for arguments
+    assert args.dataset_type in (
+        "era5",
+        "nextgems",
+        "ukesm",
+    ), f"Unknown dataset type: {args.dataset_type}"
+    create_global_forcing(
+        args.dataset, args.plot, args.dataset_path, args.dataset_type
+    )
 
 
 if __name__ == "__main__":

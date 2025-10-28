@@ -8,7 +8,8 @@ import numpy as np
 import torch
 
 # First-party
-from neural_lam import constants, utils
+from neural_lam import utils
+from neural_lam.configs import get_constants
 
 
 class WeatherDataset(torch.utils.data.Dataset):
@@ -32,10 +33,11 @@ class WeatherDataset(torch.utils.data.Dataset):
         standardize=True,
         subset=False,
         control_only=False,
+        dataset_type="era5",
         **kwarg,
     ):
         super().__init__()
-
+        self.constants = get_constants(dataset_type)
         assert split in ("train", "val", "test"), "Unknown dataset split"
         self.sample_dir_path = os.path.join(
             "data", dataset_name, "samples", split
@@ -221,7 +223,7 @@ class WeatherDataset(torch.utils.data.Dataset):
         # Encode as sin/cos
         hour_angle = (hour_of_day / 12) * torch.pi  # (sample_len,)
         year_angle = (
-            (second_into_year / constants.SECONDS_IN_YEAR) * 2 * torch.pi
+            (second_into_year / self.constants.SECONDS_IN_YEAR) * 2 * torch.pi
         )  # (sample_len,)
         datetime_forcing = torch.stack(
             (

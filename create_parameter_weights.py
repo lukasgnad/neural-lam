@@ -10,56 +10,48 @@ import xarray as xa
 from tqdm import tqdm
 
 # First-party
-# from neural_lam import constants # type: ignore
 from neural_lam.era5_dataset import ERA5Dataset
 from neural_lam.weather_dataset import WeatherDataset
+from neural_lam.configs import get_constants  # type: ignore
 
-DEFAULT_DATASET= "meps_example"
-DEFAULT_BATCH_SIZE=32
-DEFAULT_LAM_STEP_LENGTH =3
-DEFAULT_N_WORKERS=4
-DEFAULT_DATASET_PATH="data"
-DEFAULT_DATASET_TYPE="nextgems_era5"
+DEFAULT_DATASET = "meps_example"
+DEFAULT_BATCH_SIZE = 32
+DEFAULT_LAM_STEP_LENGTH = 3
+DEFAULT_N_WORKERS = 4
+DEFAULT_DATASET_PATH = "data"
+DEFAULT_DATASET_TYPE = "nextgems_era5"
 
-def create_parameter_weights(dataset:str=DEFAULT_DATASET, batch_size:int=DEFAULT_BATCH_SIZE,
-                             step_length:int=DEFAULT_LAM_STEP_LENGTH, n_workers:int=DEFAULT_N_WORKERS,
-                             dataset_path:str=DEFAULT_DATASET_PATH, dataset_type:str='', periods:str=""):
+
+def create_parameter_weights(
+    dataset: str = DEFAULT_DATASET,
+    batch_size: int = DEFAULT_BATCH_SIZE,
+    step_length: int = DEFAULT_LAM_STEP_LENGTH,
+    n_workers: int = DEFAULT_N_WORKERS,
+    dataset_path: str = DEFAULT_DATASET_PATH,
+    dataset_type: str = "",
+    periods: str = "",
+):
     static_dir_path = os.path.join(dataset_path, dataset, "static")
     if not os.path.exists(static_dir_path):
         os.makedirs(static_dir_path)
     global_ds = "global" in dataset
-    if dataset_type == 'nextgems_era5':
-        from neural_lam import constants # type: ignore
-    elif dataset_type == 'ukesm':
-        from neural_lam import ukesm_constants as constants # type: ignore
+    C = get_constants(dataset_type)
 
     if global_ds:
-        
+
         # Follow approach of GraphCast, giving vertical levels weight
         # proportional to pressure, and hand-design for surface vars
-        pres_levels_np = np.array(constants.PRESSURE_LEVELS, dtype=np.float32)
+        pres_levels_np = np.array(C.PRESSURE_LEVELS, dtype=np.float32)
         # Weighting for one variable at all pressure levels sum to 1
         pres_levels_norm = pres_levels_np / pres_levels_np.sum()  # (num_vert,)
         atm_weights = np.tile(
-            pres_levels_norm, len(constants.ATMOSPHERIC_PARAMS)
+            pres_levels_norm, len(C.ATMOSPHERIC_PARAMS)
         )  # (num_atm * num_vert,)
 
-        if dataset_type == 'nextgems_era5':
-            surface_weights = np.array(
-                [
-                    1.0 if var_name == "2t" else 0.1
-                    for var_name in constants.SURFACE_PARAMS_SHORT
-                ],
-                dtype=np.float32,
-            )  # (num_surf,)
-        elif dataset_type == 'ukesm':
-            surface_weights = np.array(
-                [
-                    1.0 if var_name == "geopotential_500" else 0.1
-                    for var_name in constants.SURFACE_PARAMS_SHORT
-                ],
-                dtype=np.float32,
-            )  # (num_surf,)
+        surface_weights = np.array(
+            C.SURFACE_WEIGHT_LIST,
+            dtype=np.float32,
+        )  # (num_surf,)
         vert_weights = np.concatenate((atm_weights, surface_weights), axis=0)
         # (num_variables,)
 
@@ -92,7 +84,7 @@ def create_parameter_weights(dataset:str=DEFAULT_DATASET, batch_size:int=DEFAULT
             "500": 0.03,
         }
         vert_weights = np.array(
-            [w_dict[par.split("_")[-2]] for par in constants.PARAM_NAMES_SHORT],
+            [w_dict[par.split("_")[-2]] for par in C.PARAM_NAMES_SHORT],
             dtype=np.float32,
         )
     print("Saving parameter weights...")
@@ -109,7 +101,7 @@ def create_parameter_weights(dataset:str=DEFAULT_DATASET, batch_size:int=DEFAULT
             pred_length=1,  # Use 1 to get each time step only once
             standardize=False,
             dataset_path=dataset_path,
-            dataset_type=dataset_type
+            dataset_type=dataset_type,
         )
     else:
         ds = WeatherDataset(
@@ -174,7 +166,7 @@ def create_parameter_weights(dataset:str=DEFAULT_DATASET, batch_size:int=DEFAULT
             pred_length=1,  # Use 1 to get each time step only once
             standardize=True,
             dataset_path=dataset_path,
-            dataset_type=dataset_type
+            dataset_type=dataset_type,
         )
     else:
         ds_standard = WeatherDataset(
@@ -203,7 +195,7 @@ def create_parameter_weights(dataset:str=DEFAULT_DATASET, batch_size:int=DEFAULT
             # Note: batch contains only 1h-steps
             stepped_batch = torch.cat(
                 [
-                    batch[:, ss_i : used_subsample_len : step_length]
+                    batch[:, ss_i:used_subsample_len:step_length]
                     for ss_i in range(step_length)
                 ],
                 dim=0,
@@ -228,6 +220,7 @@ def create_parameter_weights(dataset:str=DEFAULT_DATASET, batch_size:int=DEFAULT
     print("Saving one-step difference mean and std.-dev...")
     torch.save(diff_mean, os.path.join(static_dir_path, "diff_mean.pt"))
     torch.save(diff_std, os.path.join(static_dir_path, "diff_std.pt"))
+
 
 def main():
     """
@@ -263,13 +256,7 @@ def main():
         "--dataset_path",
         type=str,
         default=DEFAULT_DATASET_PATH,
-        help="The path to the folder containing the dataset (default \'data\')",
-    )
-    parser.add_argument(
-        "--dataset_type",
-        type=str,
-        default=DEFAULT_DATASET_TYPE,
-        help="Dataset type, either \'nextgems_era5\' or \'ukesm\'",
+        help="The path to the folder containing the dataset (default 'data')",
     )
     parser.add_argument(
         "--periods",
@@ -278,11 +265,33 @@ def main():
         help=(
             "Periods for train/val/test as: "
             "train:<start>,<end>;val:<start>,<end>;test:<start>,<end>"
-        )
+        ),
     )
+    parser.add_argument(
+        "--dataset_type",
+        type=str,
+        default="era5",
+        help="The type of dataset: era5, nextgems, ukesm",
+    )
+
     args = parser.parse_args()
-    create_parameter_weights(dataset=args.dataset, batch_size=args.batch_size, step_length=args.step_length, n_workers=args.n_workers, dataset_path=args.dataset_path, dataset_type=args.dataset_type,periods=args.periods)
-    
+
+    # Asserts for arguments
+    assert args.dataset_type in (
+        "era5",
+        "nextgems",
+        "ukesm",
+    ), f"Unknown dataset type: {args.dataset_type}"
+
+    create_parameter_weights(
+        dataset=args.dataset,
+        batch_size=args.batch_size,
+        step_length=args.step_length,
+        n_workers=args.n_workers,
+        dataset_path=args.dataset_path,
+        dataset_type=args.dataset_type,
+        periods=args.periods,
+    )
 
 
 if __name__ == "__main__":

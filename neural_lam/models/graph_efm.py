@@ -5,7 +5,7 @@ import torch
 import wandb
 
 # First-party
-from neural_lam import constants, metrics, utils, vis
+from neural_lam import metrics, utils, vis
 from neural_lam.models.ar_model import ARModel
 from neural_lam.models.constant_latent_encoder import ConstantLatentEncoder
 from neural_lam.models.graph_latent_decoder import GraphLatentDecoder
@@ -41,7 +41,7 @@ class GraphEFM(ARModel):
 
         # Specify dimensions of data
         # grid_dim from data + static
-        grid_current_dim = self.grid_dim + constants.GRID_STATE_DIM
+        grid_current_dim = self.grid_dim + self.constants.GRID_STATE_DIM
         g2m_dim = self.g2m_features.shape[1]
         m2g_dim = self.m2g_features.shape[1]
 
@@ -195,6 +195,7 @@ class GraphEFM(ARModel):
                 args.processor_layers,
                 hidden_layers=args.hidden_layers,
                 output_std=bool(args.output_std),
+                const=self.constants,
             )
         else:
             # Encoder
@@ -217,6 +218,7 @@ class GraphEFM(ARModel):
                 args.processor_layers,
                 hidden_layers=args.hidden_layers,
                 output_std=bool(args.output_std),
+                const=self.constants,
             )
 
         # Add lists for val and test errors of ensemble prediction
@@ -808,8 +810,8 @@ class GraphEFM(ARModel):
                 time_title_part = f"t={t_i} ({self.step_length*t_i} h)"
                 # Create one figure per variable at this time step
                 var_names = [
-                    constants.PARAM_NAMES_SHORT[var_i]
-                    for var_i in constants.EVAL_PLOT_VARS
+                    self.constants.PARAM_NAMES_SHORT[var_i]
+                    for var_i in self.constants.EVAL_PLOT_VARS
                 ]
                 var_figs = [
                     vis.plot_ensemble_prediction(
@@ -820,13 +822,14 @@ class GraphEFM(ARModel):
                         self.interior_mask[:, 0],
                         title=(
                             f"{var_name} "
-                            f"({constants.PARAM_UNITS[var_i]}), "
+                            f"({self.constants.PARAM_UNITS[var_i]}), "
                             f"{time_title_part}"
                         ),
                         vrange=var_vranges[var_i],
+                        const=self.constants,
                     )
                     for var_i, var_name in zip(
-                        constants.EVAL_PLOT_VARS, var_names
+                        self.constants.EVAL_PLOT_VARS, var_names
                     )
                 ]
 
@@ -949,8 +952,8 @@ class GraphEFM(ARModel):
                 # (S, pred_steps, num_grid_nodes, d_f)
 
                 for var_i, timesteps in self.val_plot_vars.items():
-                    var_name = constants.PARAM_NAMES_SHORT[var_i]
-                    var_unit = constants.PARAM_UNITS[var_i]
+                    var_name = self.constants.PARAM_NAMES_SHORT[var_i]
+                    var_unit = self.constants.PARAM_UNITS[var_i]
                     for step in timesteps:
                         prior_states = prior_traj[
                             :, step - 1, :, var_i
@@ -977,6 +980,7 @@ class GraphEFM(ARModel):
                             prior_states.std(dim=0),
                             self.interior_mask[:, 0],
                             title=f"{plot_title} (prior)",
+                            const=self.constants,
                         )
                         log_plot_dict[
                             f"vi_{var_name}_step_{step}_ex{example_i}"
@@ -987,6 +991,7 @@ class GraphEFM(ARModel):
                             enc_states.std(dim=0),
                             self.interior_mask[:, 0],
                             title=f"{plot_title} (vi)",
+                            const=self.constants,
                         )
 
             # Sample latent variable and plot
@@ -1009,7 +1014,7 @@ class GraphEFM(ARModel):
                 grid_prev_emb, graph_emb=graph_emb
             )  # Gaussian, (B, num_mesh_nodes, d_latent)
             prior_samples = prior_dist.rsample(
-                (constants.LATENT_SAMPLES_PLOT,)
+                (self.constants.LATENT_SAMPLES_PLOT,)
             ).transpose(
                 0, 1
             )  # (B, samples, num_mesh_nodes, d_latent)
@@ -1018,7 +1023,7 @@ class GraphEFM(ARModel):
                 grid_current_emb, graph_emb=graph_emb
             )  # Gaussian, (B, num_mesh_nodes, d_latent)
             vi_samples = vi_dist.rsample(
-                (constants.LATENT_SAMPLES_PLOT,)
+                (self.constants.LATENT_SAMPLES_PLOT,)
             ).transpose(
                 0, 1
             )  # (B, samples, num_mesh_nodes, d_latent)

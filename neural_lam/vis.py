@@ -6,11 +6,11 @@ import numpy as np
 import torch
 
 # First-party
-from neural_lam import constants, utils
+from neural_lam import utils
 
 
 @matplotlib.rc_context(utils.fractional_plot_bundle(1))
-def plot_error_map(errors, title=None):
+def plot_error_map(errors, title=None, const=None):
     """
     Plot a heatmap of errors of different variables at different
     predictions horizons
@@ -57,16 +57,14 @@ def plot_error_map(errors, title=None):
     label_size = 15
     ax.set_xticks(np.arange(pred_steps))
     pred_hor_i = np.arange(pred_steps) + 1  # Prediction horiz. in index
-    pred_hor_h = constants.TIME_STEP_LENGTH * pred_hor_i  # Lead time in hours
+    pred_hor_h = const.TIME_STEP_LENGTH * pred_hor_i  # Lead time in hours
     ax.set_xticklabels(pred_hor_h, size=label_size)
     ax.set_xlabel("Lead time (h)", size=label_size)
 
     ax.set_yticks(np.arange(d_f))
     y_ticklabels = [
         f"{name} ({unit})"
-        for name, unit in zip(
-            constants.PARAM_NAMES_SHORT, constants.PARAM_UNITS
-        )
+        for name, unit in zip(const.PARAM_NAMES_SHORT, const.PARAM_UNITS)
     ]
     ax.set_yticklabels(y_ticklabels, rotation=0, size=label_size)
 
@@ -77,7 +75,14 @@ def plot_error_map(errors, title=None):
 
 
 def plot_on_axis(
-    ax, data, obs_mask=None, vmin=None, vmax=None, ax_title=None, cmap="plasma"
+    ax,
+    data,
+    obs_mask=None,
+    vmin=None,
+    vmax=None,
+    ax_title=None,
+    cmap="plasma",
+    const=None,
 ):
     """
     Plot weather state on given axis
@@ -86,18 +91,18 @@ def plot_on_axis(
     if obs_mask is None:
         pixel_alpha = 1
     else:
-        mask_reshaped = obs_mask.reshape(*constants.GRID_SHAPE)
+        mask_reshaped = obs_mask.reshape(*const.GRID_SHAPE)
         pixel_alpha = (
             mask_reshaped.clamp(0.7, 1).cpu().numpy()
         )  # Faded border region
 
     ax.set_global()
     ax.coastlines()  # Add coastline outlines
-    data_grid = data.reshape(*constants.GRID_SHAPE).cpu().numpy().T
+    data_grid = data.reshape(*const.GRID_SHAPE).cpu().numpy().T
     im = ax.imshow(
         data_grid,
         origin="lower",
-        extent=constants.GRID_LIMITS,
+        extent=const.GRID_LIMITS,
         transform=cartopy.crs.PlateCarree(),
         alpha=pixel_alpha,
         vmin=vmin,
@@ -167,7 +172,9 @@ def plot_on_axis(
 
 
 @matplotlib.rc_context(utils.fractional_plot_bundle(1))
-def plot_prediction(pred, target, obs_mask=None, title=None, vrange=None):
+def plot_prediction(
+    pred, target, obs_mask=None, title=None, vrange=None, const=None
+):
     """
     Plot example prediction and grond truth.
     Each has shape (N_grid,)
@@ -180,12 +187,12 @@ def plot_prediction(pred, target, obs_mask=None, title=None, vrange=None):
         vmin, vmax = vrange
 
     fig, axes = plt.subplots(
-        1, 2, figsize=(13, 7), subplot_kw={"projection": constants.MAP_PROJ}
+        1, 2, figsize=(13, 7), subplot_kw={"projection": const.MAP_PROJ}
     )
 
     # Plot pred and target
     for ax, data in zip(axes, (target, pred)):
-        im = plot_on_axis(ax, data, obs_mask, vmin, vmax)
+        im = plot_on_axis(ax, data, obs_mask, vmin, vmax, const=const)
 
     # Ticks and labels
     axes[0].set_title("Ground Truth", size=15)
@@ -201,7 +208,14 @@ def plot_prediction(pred, target, obs_mask=None, title=None, vrange=None):
 
 @matplotlib.rc_context(utils.fractional_plot_bundle(1))
 def plot_ensemble_prediction(
-    samples, target, ens_mean, ens_std, obs_mask=None, title=None, vrange=None
+    samples,
+    target,
+    ens_mean,
+    ens_std,
+    obs_mask=None,
+    title=None,
+    vrange=None,
+    const=None,
 ):
     """
     Plot example predictions, ground truth, mean and std.-dev.
@@ -227,7 +241,7 @@ def plot_ensemble_prediction(
         3,
         3,
         figsize=(15, 15),
-        subplot_kw={"projection": constants.MAP_PROJ},
+        subplot_kw={"projection": const.MAP_PROJ},
     )
     axes = axes.flatten()
 
@@ -239,6 +253,7 @@ def plot_ensemble_prediction(
         vmin=vmin,
         vmax=vmax,
         ax_title="Ground Truth",
+        const=const,
     )
     plot_on_axis(
         axes[1],
@@ -247,9 +262,10 @@ def plot_ensemble_prediction(
         vmin=vmin,
         vmax=vmax,
         ax_title="Ens. Mean",
+        const=const,
     )
     std_im = plot_on_axis(
-        axes[2], ens_std, obs_mask=obs_mask, ax_title="Ens. Std."
+        axes[2], ens_std, obs_mask=obs_mask, ax_title="Ens. Std.", const=const
     )  # Own vrange
 
     # Plot samples
@@ -263,6 +279,7 @@ def plot_ensemble_prediction(
             vmin=vmin,
             vmax=vmax,
             ax_title=f"Member {member_i}",
+            const=const,
         )
 
     # Turn off unused axes
@@ -284,7 +301,9 @@ def plot_ensemble_prediction(
 
 
 @matplotlib.rc_context(utils.fractional_plot_bundle(1))
-def plot_spatial_error(error, obs_mask=None, title=None, vrange=None):
+def plot_spatial_error(
+    error, obs_mask=None, title=None, vrange=None, const=None
+):
     """
     Plot errors over spatial map
     Error and obs_mask has shape (N_grid,)
@@ -297,10 +316,10 @@ def plot_spatial_error(error, obs_mask=None, title=None, vrange=None):
         vmin, vmax = vrange
 
     fig, ax = plt.subplots(
-        figsize=(5, 4.8), subplot_kw={"projection": constants.MAP_PROJ}
+        figsize=(5, 4.8), subplot_kw={"projection": const.MAP_PROJ}
     )
 
-    im = plot_on_axis(ax, error, obs_mask, vmin, vmax, cmap="OrRd")
+    im = plot_on_axis(ax, error, obs_mask, vmin, vmax, cmap="OrRd", const=const)
 
     # Ticks and labels
     cbar = fig.colorbar(im, aspect=30)

@@ -2,7 +2,7 @@
 from torch import nn
 
 # First-party
-from neural_lam import constants, utils
+from neural_lam import utils
 
 
 class BaseGraphLatentDecoder(nn.Module):
@@ -16,6 +16,7 @@ class BaseGraphLatentDecoder(nn.Module):
         latent_dim,
         hidden_layers=1,
         output_std=True,
+        constants=None,
     ):
         super().__init__()
 

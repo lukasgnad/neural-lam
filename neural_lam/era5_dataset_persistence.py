@@ -14,7 +14,9 @@ import gcsfs
 import xarray as xa
 
 # First-party
-from neural_lam import constants, utils
+from neural_lam import utils
+from neural_lam.configs import get_constants
+
 
 def parse_periods(periods_str):
     periods = {}
@@ -40,12 +42,13 @@ class ERA5PersistenceDataset(torch.utils.data.Dataset):
         split="train",
         standardize=True,
         dataset_path="data",
+        dataset_type="era5",
         **kwarg,  # pylint: disable=unused-argument
     ):
         super().__init__()
 
         assert split in ("train", "val", "test"), "Unknown dataset split"
-
+        constants = get_constants(dataset_type)
         # Open xarrays
         fields_path = os.path.join(dataset_path, dataset_name, "fields.zarr")
         fields_xds = xa.open_zarr(fields_path)
@@ -63,7 +66,7 @@ class ERA5PersistenceDataset(torch.utils.data.Dataset):
         # Compute dataset length
         timesteps_in_split = len(fields_ds_split.coords["time"])
         self.pred_length = pred_length
-        
+
         # -1 for AR-2, - pred_length for target states
         ds_timesteps = timesteps_in_split - 3 - pred_length
         assert ds_timesteps > 0, "Dataset too small for given pred_length"
@@ -79,7 +82,9 @@ class ERA5PersistenceDataset(torch.utils.data.Dataset):
         # Set up for standardization
         self.standardize = standardize
         if standardize:
-            ds_stats = utils.load_dataset_stats(dataset_name, dataset_path, "cpu")
+            ds_stats = utils.load_dataset_stats(
+                dataset_name, dataset_path, "cpu"
+            )
 
             # These are torch arrays
             self.data_mean = ds_stats["data_mean"]
@@ -111,74 +116,71 @@ class ERA5PersistenceDataset(torch.utils.data.Dataset):
     def __len__(self):
         return self.ds_len
 
-
     def __getitem__(self, idx):
-            # Forecast t=(s+1):(s+pred_length) from init states at t=s-1,s
-            if self.init_all:
-                init_i = idx + 3  # s = idx+1
-            else:
-                # Only initialize at 00/12 UTC timesteps
-                init_i = 3 + idx * 2  # s = 1 + 2idx
-            sample_slice = slice(init_i - 3, init_i + self.pred_length + 1)
-            full_series_len = self.pred_length + 4
+        # Forecast t=(s+1):(s+pred_length) from init states at t=s-1,s
+        if self.init_all:
+            init_i = idx + 3  # s = idx+1
+        else:
+            # Only initialize at 00/12 UTC timesteps
+            init_i = 3 + idx * 2  # s = 1 + 2idx
+        sample_slice = slice(init_i - 3, init_i + self.pred_length + 1)
+        full_series_len = self.pred_length + 4
 
-            # === Sample ===
-            # Extract and stack sample fields from zarr
-            atm_sample_np = self.atm_xda[sample_slice].to_numpy()
-            # (2+pred_length, num_lon, num_lat, d_atm, num_levels)
-            surface_sample_np = self.surface_xda[sample_slice].to_numpy()
-            # (2+pred_length, num_lon, num_lat, d_surface)
+        # === Sample ===
+        # Extract and stack sample fields from zarr
+        atm_sample_np = self.atm_xda[sample_slice].to_numpy()
+        # (2+pred_length, num_lon, num_lat, d_atm, num_levels)
+        surface_sample_np = self.surface_xda[sample_slice].to_numpy()
+        # (2+pred_length, num_lon, num_lat, d_surface)
 
-            full_state_np = np.concatenate(
-                (
-                    atm_sample_np.reshape(
-                        (full_series_len, -1, self.atm_total_dim)
-                    ),  # (2+pred_length, num_grid, d_atm')
-                    surface_sample_np.reshape(
-                        (full_series_len, -1, self.surface_total_dim)
-                    ),  # (2+pred_length, num_grid, d_surface)
-                ),
-                axis=-1,
-            )  # (2+pred_length, num_grid, state_dim)
+        full_state_np = np.concatenate(
+            (
+                atm_sample_np.reshape(
+                    (full_series_len, -1, self.atm_total_dim)
+                ),  # (2+pred_length, num_grid, d_atm')
+                surface_sample_np.reshape(
+                    (full_series_len, -1, self.surface_total_dim)
+                ),  # (2+pred_length, num_grid, d_surface)
+            ),
+            axis=-1,
+        )  # (2+pred_length, num_grid, state_dim)
 
-            # Convert to torch
-            full_state_torch = torch.tensor(full_state_np, dtype=torch.float32)
-            if self.standardize:
-                # Standardize sample
-                full_state_torch = (
-                    full_state_torch - self.data_mean
-                ) / self.data_std
+        # Convert to torch
+        full_state_torch = torch.tensor(full_state_np, dtype=torch.float32)
+        if self.standardize:
+            # Standardize sample
+            full_state_torch = (
+                full_state_torch - self.data_mean
+            ) / self.data_std
 
-            # Split into init_states and target
-            init_states = full_state_torch[:4]
-            target_states = full_state_torch[4:]
-                
+        # Split into init_states and target
+        init_states = full_state_torch[:4]
+        target_states = full_state_torch[4:]
 
-            # === Forcing features ===
-            # Note that forcing should be sliced for same length, first and last
-            # time steps will be eaten up by windowing
-            # Extract forcing from zarr
-            forcing_np = self.forcing_xda[sample_slice].to_numpy()
-            # (2+pred_length, num_lon, num_lat, forcing_dim)
+        # === Forcing features ===
+        # Note that forcing should be sliced for same length, first and last
+        # time steps will be eaten up by windowing
+        # Extract forcing from zarr
+        forcing_np = self.forcing_xda[sample_slice].to_numpy()
+        # (2+pred_length, num_lon, num_lat, forcing_dim)
 
-            # Flatten lat-lon dim
-            forcing_flat_np = forcing_np.reshape(
-                full_series_len, -1, forcing_np.shape[-1]
-            )  # (pred_length, num_grid, forcing_dim)
+        # Flatten lat-lon dim
+        forcing_flat_np = forcing_np.reshape(
+            full_series_len, -1, forcing_np.shape[-1]
+        )  # (pred_length, num_grid, forcing_dim)
 
-            # Window and stack 3 time steps
-            forcing_windowed = np.concatenate(
-                (
-                    forcing_flat_np[:-4],
-                    forcing_flat_np[2:-2],
-                    forcing_flat_np[4:],
-                ),
-                axis=2,
-            )  # (pred_length, num_grid, forcing_dim')
+        # Window and stack 3 time steps
+        forcing_windowed = np.concatenate(
+            (
+                forcing_flat_np[:-4],
+                forcing_flat_np[2:-2],
+                forcing_flat_np[4:],
+            ),
+            axis=2,
+        )  # (pred_length, num_grid, forcing_dim')
 
-            # Convert to torch tensor
-            forcing_torch = torch.tensor(forcing_windowed, dtype=torch.float32)
-            # Do not need to standardize forcing, already handled in generation
+        # Convert to torch tensor
+        forcing_torch = torch.tensor(forcing_windowed, dtype=torch.float32)
+        # Do not need to standardize forcing, already handled in generation
 
-            return init_states, target_states, forcing_torch
-
+        return init_states, target_states, forcing_torch
