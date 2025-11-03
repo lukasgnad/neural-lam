@@ -1,14 +1,14 @@
 #!/bin/bash -x
 #SBATCH --nodes=1
-#SBATCH --time=11:00:00
+#SBATCH --time=15:00:00
 #SBATCH --gres=gpu:4
 #SBATCH --partition=accelerated
 #SBATCH --ntasks-per-node=4
 #SBATCH --mem=250gb
 #SBATCH --mail-type="END"
 #SBATCH --mail-user="xo8179@partner.kit.edu"
-#SBATCH --error=/home/hk-project-pai00005/xo8179/neural_lam_fork/neural-lam/trained_models/ukesm_1985_2014_6h-128x64_equiangular_with_poles_conservative_z256/logs/error_train_03.log
-#SBATCH --output=/home/hk-project-pai00005/xo8179/neural_lam_fork/neural-lam/trained_models/ukesm_1985_2014_6h-128x64_equiangular_with_poles_conservative_z256/logs/output_train_03.log
+#SBATCH --error=/home/hk-project-pai00005/xo8179/neural_lam_fork/neural-lam/trained_models/nextgems_1990_2020_6h-128x64_equiangular_with_poles_conservative_z128/logs/error_train_03.log
+#SBATCH --output=/home/hk-project-pai00005/xo8179/neural_lam_fork/neural-lam/trained_models/nextgems_1990_2020_6h-128x64_equiangular_with_poles_conservative_z128/logs/output_train_03.log
 #SBATCH --account=hk-project-p0024498
 
 echo "===== SLURM Job Info ====="
@@ -25,14 +25,13 @@ echo "Memory per Node:  $SLURM_MEM_PER_NODE"
 echo "==========================="
 
 # --- Variables
-dataset_type=ukesm
-run_name=ukesm_1985_2014_6h-128x64_equiangular_with_poles_conservative_z256
-dataset_name=global_1985_2014_equiangular_wp_conservative_40_chunks
-dataset_path=/hkfs/work/workspace/scratch/xo8179-ukesm/
-graph_name=global_multilevel_ukesm_withpoles_conservative
+run_name=nextgems_1990_2020_6h-128x64_equiangular_with_poles_conservative_z128
+dataset_name=global_nextgems_1990_2020_6h-128x64_equiangular_with_poles_conservative
+dataset_path=$(ws_find neural_lam)/data/data
+graph_name=global_multilevel_nextgems_withpoles_conservative
 model_name=graphcast
 tmp_path=$TMPDIR
-hidden_dim=256
+hidden_dim=128
 epochs_first=70
 epochs_second=20
 epochs_third=20
@@ -43,7 +42,7 @@ lr_third=1e-4
 unroll_first=1
 unroll_second=4
 unroll_third=8
-periods="train:1985-01-01,2010-12-30;val:2011-01-01,2012-12-30;test:2013-01-01,2014-12-30"
+periods="train:1990-01-01,2015-12-31;val:2016-01-01,2017-12-31;test:2018-01-01,2019-12-31"
 # --- Variables
 
 cd /home/hk-project-pai00005/xo8179/neural_lam_fork/neural-lam
@@ -154,5 +153,4 @@ srun python -u train_model.py \
     --load saved_models/${run_name}_02/last.ckpt \
     --periods ${periods} \
     --lr ${lr_third} \
-    --hidden_dim ${hidden_dim} \
-    --dataset_type ${dataset_type}
+    --hidden_dim ${hidden_dim}

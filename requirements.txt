@@ -22,4 +22,5 @@ xarray
 gcsfs
 zarr==2.18.7
 graphcast @ https://github.com/deepmind/graphcast/archive/master.zip
+cftime
 

@@ -22,10 +22,10 @@ echo "Tasks per node:   $SLURM_NTASKS_PER_NODE"
 echo "Memory per Node:  $SLURM_MEM_PER_NODE"
 echo "==========================="
 
-dataset=global_1985_2014_equiangular_wp_conservative_40_chunks
+dataset=global_2097_2100_equiangular_wp_conservative
 dataset_path=/hkfs/work/workspace/scratch/xo8179-ukesm/
 
-periods="train:1985-01-01,2010-12-30;val:2011-01-01,2012-12-30;test:2011-01-01,2014-12-30"
+periods="train:2097-01-01,2100-12-30;val:2097-01-01,2100-12-30;test:2097-01-01,2100-12-30"
 
 graph_name="global_multilevel_ukesm_withpoles_conservative"
 
@@ -35,19 +35,20 @@ echo "Activated python"
 ml devel/cuda/11.8
 echo "Loaded Cuda"
 
-python create_global_mesh.py \
-    --dataset ${dataset} \
-    --dataset_path ${dataset_path} \
-    --graph ${graph_name} \
-    --hierarchical 0 \
-    --splits 4 \
-    --levels 4
+# This one already exists
+# python create_global_mesh.py \
+#     --dataset ${dataset} \
+#     --dataset_path ${dataset_path} \
+#     --graph ${graph_name} \
+#     --hierarchical 0 \
+#     --splits 4 \
+#     --levels 4
 
 python create_global_grid_features.py \
     --dataset ${dataset} \
     --dataset_path ${dataset_path}
 
-# Here we use the stable version, to account for problems with the 360 day calendar
+# python create_global_forcing.py \
 python create_global_forcing_stable.py \
     --dataset ${dataset} \
     --dataset_path ${dataset_path} \

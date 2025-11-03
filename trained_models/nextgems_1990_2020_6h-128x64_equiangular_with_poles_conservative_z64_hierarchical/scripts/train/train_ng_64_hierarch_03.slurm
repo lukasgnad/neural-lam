@@ -26,6 +26,7 @@ echo "==========================="
 
 # --- Variables
 run_name=nextgems_1990_2020_6h-128x64_equiangular_with_poles_conservative_z64_hierarchical
+dataset_type=nextgems
 dataset_name=global_nextgems_1990_2020_6h-128x64_equiangular_with_poles_conservative
 dataset_path=$(ws_find neural_lam)/data/data
 graph_name=global_hierarchical_nextgems_withpoles_conservative

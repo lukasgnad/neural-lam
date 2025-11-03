@@ -1,14 +1,14 @@
 #!/bin/bash -x
 #SBATCH --nodes=1
-#SBATCH --time=11:00:00
+#SBATCH --time=13:00:00
 #SBATCH --gres=gpu:4
 #SBATCH --partition=accelerated
 #SBATCH --ntasks-per-node=4
 #SBATCH --mem=250gb
 #SBATCH --mail-type="END"
 #SBATCH --mail-user="xo8179@partner.kit.edu"
-#SBATCH --error=/home/hk-project-pai00005/xo8179/neural_lam_fork/neural-lam/trained_models/ukesm_1985_2014_6h-128x64_equiangular_with_poles_conservative_z256/logs/error_train_01.log
-#SBATCH --output=/home/hk-project-pai00005/xo8179/neural_lam_fork/neural-lam/trained_models/ukesm_1985_2014_6h-128x64_equiangular_with_poles_conservative_z256/logs/output_train_01.log
+#SBATCH --error=/home/hk-project-pai00005/xo8179/neural_lam_fork/neural-lam/trained_models/ukesm_1985_2014_6h-128x64_equiangular_with_poles_conservative_z128/logs/error_train_02.log
+#SBATCH --output=/home/hk-project-pai00005/xo8179/neural_lam_fork/neural-lam/trained_models/ukesm_1985_2014_6h-128x64_equiangular_with_poles_conservative_z128/logs/output_train_02.log
 #SBATCH --account=hk-project-p0024498
 
 echo "===== SLURM Job Info ====="
@@ -25,14 +25,13 @@ echo "Memory per Node:  $SLURM_MEM_PER_NODE"
 echo "==========================="
 
 # --- Variables
-dataset_type=ukesm
-run_name=ukesm_1985_2014_6h-128x64_equiangular_with_poles_conservative_z256
+run_name=ukesm_1985_2014_6h-128x64_equiangular_with_poles_conservative_z128
 dataset_name=global_1985_2014_equiangular_wp_conservative_40_chunks
 dataset_path=/hkfs/work/workspace/scratch/xo8179-ukesm/
 graph_name=global_multilevel_ukesm_withpoles_conservative
 model_name=graphcast
 tmp_path=$TMPDIR
-hidden_dim=256
+hidden_dim=128
 epochs_first=70
 epochs_second=20
 epochs_third=20
@@ -61,69 +60,69 @@ echo "Copied data in $elapsed seconds."
 
 echo "Current working directory:"
 pwd
-echo ""
-echo "----------------------------------------------"
-echo "1/3 - Running python file with following command:"
-echo "srun python train_model.py \\"
-echo "    --name ${run_name}_01 \\"
-echo "    --model ${model_name} \\"
-echo "    --graph ${graph_name} \\"
-echo "    --dataset ${dataset_name} \\"
-echo "    --dataset_path ${tmp_path} \\"
-echo "    --epochs ${epochs_first} \\"
-echo "    --ar_steps ${unroll_first} \\"
-echo "    --periods ${periods} \\"
-echo "    --lr ${lr_first} \\"
-echo "    --hidden_dim ${hidden_dim}"
-echo "GPU state before 1st run:"
-nvidia-smi
-echo "----------------------------------------------"
-echo ""
-srun python -u train_model.py \
-    --name ${run_name}_01 \
-    --model ${model_name} \
-    --graph ${graph_name} \
-    --dataset ${dataset_name} \
-    --dataset_path ${tmp_path} \
-    --epochs ${epochs_first} \
-    --ar_steps ${unroll_first} \
-    --periods ${periods} \
-    --lr ${lr_first} \
-    --hidden_dim ${hidden_dim} \
-    --dataset_type ${dataset_type}
-
 
 # echo ""
 # echo "----------------------------------------------"
-# echo "2/3 - Running python file with the following command:"
+# echo "1/3 - Running python file with following command:"
 # echo "srun python train_model.py \\"
-# echo "    --name ${run_name}_02 \\"
+# echo "    --name ${run_name}_01 \\"
 # echo "    --model ${model_name} \\"
 # echo "    --graph ${graph_name} \\"
 # echo "    --dataset ${dataset_name} \\"
 # echo "    --dataset_path ${tmp_path} \\"
-# echo "    --epochs ${epochs_second} \\"
-# echo "    --ar_steps ${unroll_second} \\"
-# echo "    --load saved_models/${run_name}_01/last.ckpt \\"
+# echo "    --epochs ${epochs_first} \\"
+# echo "    --ar_steps ${unroll_first} \\"
 # echo "    --periods ${periods} \\"
-# echo "    --lr ${lr_second} \\"
+# echo "    --lr ${lr_first} \\"
 # echo "    --hidden_dim ${hidden_dim}"
-# echo "GPU state before 2nd run:"
+# echo "GPU state before 1st run:"
 # nvidia-smi
 # echo "----------------------------------------------"
 # echo ""
 # srun python train_model.py \
-#     --name ${run_name}_02 \
+#     --name ${run_name}_01 \
 #     --model ${model_name} \
 #     --graph ${graph_name} \
 #     --dataset ${dataset_name} \
 #     --dataset_path ${tmp_path} \
-#     --epochs ${epochs_second} \
-#     --ar_steps ${unroll_second} \
-#     --load saved_models/${run_name}_01/last.ckpt \
+#     --epochs ${epochs_first} \
+#     --ar_steps ${unroll_first} \
 #     --periods ${periods} \
-#     --lr ${lr_second} \
+#     --lr ${lr_first} \
 #     --hidden_dim ${hidden_dim}
+
+
+echo ""
+echo "----------------------------------------------"
+echo "2/3 - Running python file with the following command:"
+echo "srun python train_model.py \\"
+echo "    --name ${run_name}_02 \\"
+echo "    --model ${model_name} \\"
+echo "    --graph ${graph_name} \\"
+echo "    --dataset ${dataset_name} \\"
+echo "    --dataset_path ${tmp_path} \\"
+echo "    --epochs ${epochs_second} \\"
+echo "    --ar_steps ${unroll_second} \\"
+echo "    --load saved_models/${run_name}_01/last.ckpt \\"
+echo "    --periods ${periods} \\"
+echo "    --lr ${lr_second} \\"
+echo "    --hidden_dim ${hidden_dim}"
+echo "GPU state before 2nd run:"
+nvidia-smi
+echo "----------------------------------------------"
+echo ""
+srun python -u train_model.py \
+    --name ${run_name}_02 \
+    --model ${model_name} \
+    --graph ${graph_name} \
+    --dataset ${dataset_name} \
+    --dataset_path ${tmp_path} \
+    --epochs ${epochs_second} \
+    --ar_steps ${unroll_second} \
+    --load saved_models/${run_name}_01/last.ckpt \
+    --periods ${periods} \
+    --lr ${lr_second} \
+    --hidden_dim ${hidden_dim}
 
 # echo ""
 # echo "----------------------------------------------"

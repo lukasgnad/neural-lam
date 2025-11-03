@@ -89,6 +89,5 @@ srun python -u train_model.py \
     --load saved_models/${run_name}_02/last.ckpt \
     --periods ${periods} \
     --lr ${lr_third} \
-    --hidden_dim ${hidden_dim} \
-    --dataset_type ${dataset_type}
+    --hidden_dim ${hidden_dim}
 

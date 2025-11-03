@@ -440,10 +440,15 @@ def main():
         )
 
     # Callbacks for saving model checkpoint
+
+    ckpt_dir = f"saved_models/{run_name}"
+    if os.path.exists(ckpt_dir):
+        shutil.rmtree(ckpt_dir)
+
     callbacks = []
     callbacks.append(
         pl.callbacks.ModelCheckpoint(
-            dirpath=f"saved_models/{run_name}",
+            dirpath=ckpt_dir,
             filename="min_val_loss",
             monitor="val_mean_loss",
             mode="min",
@@ -459,7 +464,7 @@ def main():
         metric_name = f"val_loss_unroll{unroll_time}"
         callbacks.append(
             pl.callbacks.ModelCheckpoint(
-                dirpath=f"saved_models/{run_name}",
+                dirpath=ckpt_dir,
                 filename=f"min_{metric_name}",
                 monitor=metric_name,
                 mode="min",

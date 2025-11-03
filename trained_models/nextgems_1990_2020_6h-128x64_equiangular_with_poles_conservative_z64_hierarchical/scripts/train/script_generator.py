@@ -7,6 +7,7 @@ dataset_name = (
     "global_nextgems_1990_2020_6h-128x64_equiangular_with_poles_conservative"
 )
 dataset_path = "$(ws_find neural_lam)/data/data"
+dataset_type = "nextgems"
 graph_name = "global_hierarchical_nextgems_withpoles_conservative"
 model_name = "graph_fm"
 tmp_path = "$TMPDIR"
@@ -53,6 +54,7 @@ def header(ex_time, run):
 
     # --- Variables
     run_name={run_name}
+    dataset_type={dataset_type}
     dataset_name={dataset_name}
     dataset_path={dataset_path}
     graph_name={graph_name}
@@ -121,7 +123,8 @@ steps = {
             --ar_steps ${unroll_first} \\
             --periods ${periods} \\
             --lr ${lr_first} \\
-            --hidden_dim ${hidden_dim}
+            --hidden_dim ${hidden_dim} \\
+            --dataset_type ${dataset_type}
         """
     ),
     "step2": dedent(
@@ -155,7 +158,8 @@ steps = {
             --load saved_models/${run_name}_01/last.ckpt \\
             --periods ${periods} \\
             --lr ${lr_second} \\
-            --hidden_dim ${hidden_dim}
+            --hidden_dim ${hidden_dim} \\
+            --dataset_type ${dataset_type}
         """
     ),
     "step3": dedent(
@@ -189,14 +193,15 @@ steps = {
             --load saved_models/${run_name}_02/last.ckpt \\
             --periods ${periods} \\
             --lr ${lr_third} \\
-            --hidden_dim ${hidden_dim}
+            --hidden_dim ${hidden_dim} \\
+            --dataset_type ${dataset_type}
         """
     ),
 }
 
 # === Write out the files ===
 for i, (step_name, body) in enumerate(steps.items(), start=1):
-    filename = f"train_{i:02d}.slurm"
+    filename = f"train_ng_64_hierarch_{i:02d}.slurm"
     execution_time = int(
         execution_time_hours * 0.8 if i == 2 else execution_time_hours
     )

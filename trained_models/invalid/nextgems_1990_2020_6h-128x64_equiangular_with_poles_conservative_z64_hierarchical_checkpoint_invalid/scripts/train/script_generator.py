@@ -2,18 +2,15 @@ import os
 from textwrap import dedent
 
 # === Central variables ===
-run_name = (
-    "nextgems_1990_2020_6h-128x64_equiangular_with_poles_conservative_z256"
-)
+run_name = "nextgems_1990_2020_6h-128x64_equiangular_with_poles_conservative_z64_hierarchical"
 dataset_name = (
     "global_nextgems_1990_2020_6h-128x64_equiangular_with_poles_conservative"
 )
 dataset_path = "$(ws_find neural_lam)/data/data"
-dataset_type = "nextgems"
-graph_name = "global_multilevel_nextgems_withpoles_conservative"
-model_name = "graphcast"
+graph_name = "global_hierarchical_nextgems_withpoles_conservative"
+model_name = "graph_fm"
 tmp_path = "$TMPDIR"
-hidden_dim = 256
+hidden_dim = 64
 epochs_first, epochs_second, epochs_third = 70, 20, 20
 lr_first, lr_second, lr_third = "1e-3", "1e-4", "1e-4"
 unroll_first, unroll_second, unroll_third = 1, 4, 8
@@ -21,7 +18,7 @@ periods = "train:1990-01-01,2015-12-31;val:2016-01-01,2017-12-31;test:2018-01-01
 
 # === Paths for logs ===
 base_logdir = f"/home/hk-project-pai00005/xo8179/neural_lam_fork/neural-lam/trained_models/{run_name}/logs"
-execution_time_hours = 22
+execution_time_hours = 30
 
 
 # === SLURM header (same for all) ===
@@ -55,7 +52,6 @@ def header(ex_time, run):
     echo "==========================="
 
     # --- Variables
-    dataset_type={dataset_type}
     run_name={run_name}
     dataset_name={dataset_name}
     dataset_path={dataset_path}
@@ -110,8 +106,7 @@ steps = {
         echo "    --ar_steps ${unroll_first} \\\\"
         echo "    --periods ${periods} \\\\"
         echo "    --lr ${lr_first} \\\\"
-        echo "    --hidden_dim ${hidden_dim} \\\\"
-        echo "    --dataset_type ${dataset_type}"
+        echo "    --hidden_dim ${hidden_dim}"
         echo "GPU state before 1st run:"
         nvidia-smi
         echo "----------------------------------------------"
@@ -126,8 +121,7 @@ steps = {
             --ar_steps ${unroll_first} \\
             --periods ${periods} \\
             --lr ${lr_first} \\
-            --hidden_dim ${hidden_dim} \\
-            --dataset_type ${dataset_type}
+            --hidden_dim ${hidden_dim}
         """
     ),
     "step2": dedent(
@@ -145,8 +139,7 @@ steps = {
         echo "    --load saved_models/${run_name}_01/last.ckpt \\\\"
         echo "    --periods ${periods} \\\\"
         echo "    --lr ${lr_second} \\\\"
-        echo "    --hidden_dim ${hidden_dim} \\\\"
-        echo "    --dataset_type ${dataset_type}"
+        echo "    --hidden_dim ${hidden_dim}"
         echo "GPU state before 2nd run:"
         nvidia-smi
         echo "----------------------------------------------"
@@ -162,8 +155,7 @@ steps = {
             --load saved_models/${run_name}_01/last.ckpt \\
             --periods ${periods} \\
             --lr ${lr_second} \\
-            --hidden_dim ${hidden_dim} \\
-            --dataset_type ${dataset_type}
+            --hidden_dim ${hidden_dim}
         """
     ),
     "step3": dedent(
@@ -181,8 +173,7 @@ steps = {
         echo "    --load saved_models/${run_name}_02/last.ckpt \\\\"
         echo "    --periods ${periods} \\\\"
         echo "    --lr ${lr_third} \\\\"
-        echo "    --hidden_dim ${hidden_dim} \\\\"
-        echo "    --dataset_type ${dataset_type}"
+        echo "    --hidden_dim ${hidden_dim}"
         echo "GPU state before 3rd run:"
         nvidia-smi
         echo "----------------------------------------------"
@@ -198,15 +189,14 @@ steps = {
             --load saved_models/${run_name}_02/last.ckpt \\
             --periods ${periods} \\
             --lr ${lr_third} \\
-            --hidden_dim ${hidden_dim} \\
-            --dataset_type ${dataset_type}
+            --hidden_dim ${hidden_dim}
         """
     ),
 }
 
 # === Write out the files ===
 for i, (step_name, body) in enumerate(steps.items(), start=1):
-    filename = f"train_ng_{hidden_dim}_{i:02d}.slurm"
+    filename = f"train_{i:02d}.slurm"
     execution_time = int(
         execution_time_hours * 0.8 if i == 2 else execution_time_hours
     )

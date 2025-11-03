@@ -1,14 +1,14 @@
 #!/bin/bash -x
 #SBATCH --nodes=1
-#SBATCH --time=30:00:00
+#SBATCH --time=22:00:00
 #SBATCH --gres=gpu:4
 #SBATCH --partition=accelerated
 #SBATCH --ntasks-per-node=4
 #SBATCH --mem=250gb
 #SBATCH --mail-type="END"
 #SBATCH --mail-user="xo8179@partner.kit.edu"
-#SBATCH --error=/home/hk-project-pai00005/xo8179/neural_lam_fork/neural-lam/trained_models/nextgems_1990_2020_6h-128x64_equiangular_with_poles_conservative_z64_hierarchical/logs/error_train_03.log
-#SBATCH --output=/home/hk-project-pai00005/xo8179/neural_lam_fork/neural-lam/trained_models/nextgems_1990_2020_6h-128x64_equiangular_with_poles_conservative_z64_hierarchical/logs/output_train_03.log
+#SBATCH --error=/home/hk-project-pai00005/xo8179/neural_lam_fork/neural-lam/trained_models/nextgems_1990_2020_6h-128x64_equiangular_with_poles_conservative_z256/logs/error_train_03.log
+#SBATCH --output=/home/hk-project-pai00005/xo8179/neural_lam_fork/neural-lam/trained_models/nextgems_1990_2020_6h-128x64_equiangular_with_poles_conservative_z256/logs/output_train_03.log
 #SBATCH --account=hk-project-p0024498
 
 echo "===== SLURM Job Info ====="
@@ -25,16 +25,16 @@ echo "Memory per Node:  $SLURM_MEM_PER_NODE"
 echo "==========================="
 
 # --- Variables
-run_name=nextgems_1990_2020_6h-128x64_equiangular_with_poles_conservative_z64_hierarchical
+run_name=nextgems_1990_2020_6h-128x64_equiangular_with_poles_conservative_z256
 dataset_name=global_nextgems_1990_2020_6h-128x64_equiangular_with_poles_conservative
 dataset_path=$(ws_find neural_lam)/data/data
-graph_name=global_hierarchical_nextgems_withpoles_conservative
-model_name=graph_fm
+graph_name=global_multilevel_nextgems_withpoles_conservative
+model_name=graphcast
 tmp_path=$TMPDIR
-hidden_dim=64
-epochs_first=70
-epochs_second=20
-epochs_third=20
+hidden_dim=256
+epochs_first=1
+epochs_second=1
+epochs_third=1
 lr_first=1e-3
 lr_second=1e-4
 lr_third=1e-4
@@ -89,6 +89,5 @@ srun python -u train_model.py \
     --load saved_models/${run_name}_02/last.ckpt \
     --periods ${periods} \
     --lr ${lr_third} \
-    --hidden_dim ${hidden_dim} \
-    --dataset_type ${dataset_type}
+    --hidden_dim ${hidden_dim}
 
