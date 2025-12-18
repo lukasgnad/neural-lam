@@ -24,6 +24,11 @@ class BaseConfig:
     GRID_ORIGINAL_FORCING_DIM = 5
     GRID_FORCING_DIM = GRID_ORIGINAL_FORCING_DIM * 3
 
+    WIND_U_NAME = "u_component_of_wind"
+    WIND_V_NAME = "v_component_of_wind"
+    WIND_U_SURFACE_NAME = "10m_u_component_of_wind"
+    WIND_V_SURFACE_NAME = "10m_v_component_of_wind"
+
     def _get_var_index(self, var_short, pressure_level=None):
         # Get 3D var index
         if pressure_level:

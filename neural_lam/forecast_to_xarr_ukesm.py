@@ -1,0 +1,456 @@
+# Standard library
+import os
+
+# Third-party
+import numpy as np
+import torch
+import xarray as xa
+from tqdm import tqdm
+import cftime
+from datetime import timedelta as dt_timedelta
+
+# First-party
+from neural_lam.configs import get_constants
+from neural_lam.models.graph_efm import GraphEFM
+
+FC_DIR_PATH = "saved_forecasts"
+
+
+def get_var_dims(save_ensemble):
+    """
+    Get dimension names for atmospheric and surface variables
+    """
+    atm_dims = (
+        "time",
+        "prediction_timedelta",
+        "longitude",
+        "latitude",
+        "level",
+    )
+    sur_dims = (
+        "time",
+        "prediction_timedelta",
+        "longitude",
+        "latitude",
+    )
+
+    if save_ensemble:
+        atm_dims = ("realization",) + atm_dims
+        sur_dims = ("realization",) + sur_dims
+
+    return atm_dims, sur_dims
+
+
+def forecast_to_xds(
+    forecast_tensor,
+    batch_init_times,
+    coords,
+    var_filter_list,
+    level_filter_list,
+    time_enc_unit,
+    C,
+):
+    """
+    Turn a pytorch tensor representing a forecast into a saveable xarray.Dataset
+
+    forecast_tensor: (B, (S), pred_steps, num_grid_nodes, d_f)
+    """
+    # Figure out if ensemble (S-dimension exists)
+    save_ensemble = len(forecast_tensor.shape) == 5
+
+    full_fc = forecast_tensor.cpu().numpy()
+    # (B, (S), pred_steps, num_grid_nodes, d_f)
+    # Now on CPU, numpy
+
+    # Reshape to grid shape
+    # Note: this reshape works with or without S-dimension
+    full_fc_grid = full_fc.reshape(
+        *full_fc.shape[:-2],
+        *C.GRID_SHAPE,
+        full_fc.shape[-1],
+    )  # (B, (S), pred_steps, num_lon, num_lat, d_f)
+
+    if save_ensemble:
+        # Transpose first dimensions, so they are (realization, time, ...)
+        full_fc_grid = np.moveaxis(full_fc_grid, 1, 0)
+
+    fc_sur = full_fc_grid[..., -len(C.SURFACE_PARAMS) :]
+    # (..., num_sur_vars)
+    fc_atm = full_fc_grid[..., : -len(C.SURFACE_PARAMS)]
+    # (..., num_atm_vars * num_levels)
+
+    fc_sur_list = np.split(fc_sur, len(C.SURFACE_PARAMS), axis=-1)
+    fc_sur_list = [fc.squeeze(-1) for fc in fc_sur_list]
+    # list of ((S), B, pred_steps, num_lon, num_lat)
+
+    fc_atm_list = np.split(fc_atm, len(C.ATMOSPHERIC_PARAMS), axis=-1)
+    # list of ((S), B, pred_steps, num_lon, num_lat, num_levels)
+
+    # Turn whole forecast into xr.Dataset
+    atm_dims, sur_dims = get_var_dims(save_ensemble)
+    fc_var_dict = dict(
+        zip(
+            C.ATMOSPHERIC_PARAMS,
+            ((atm_dims, var_vals) for var_vals in fc_atm_list),
+        )
+    ) | dict(
+        zip(
+            C.SURFACE_PARAMS,
+            ((sur_dims, var_vals) for var_vals in fc_sur_list),
+        )
+    )
+
+    # Create dataset
+    batch_xds = xa.Dataset(
+        fc_var_dict,
+        coords={
+            "time": batch_init_times,
+        }
+        | {c: v.values for c, v in coords if c != "time"},
+    )
+
+    batch_xds.time.encoding["units"] = time_enc_unit
+
+    # Filter batch dataset
+    filtered_batch_xds = filter_xdataset(
+        batch_xds, var_filter_list, level_filter_list
+    )
+
+    # Optionally compute and add wind speeds
+    if (
+        C.WIND_U_NAME in filtered_batch_xds
+        and C.WIND_V_NAME in filtered_batch_xds
+    ):
+        wind_speed = np.sqrt(
+            filtered_batch_xds[C.WIND_U_NAME] ** 2
+            + filtered_batch_xds[C.WIND_V_NAME] ** 2
+        )
+        filtered_batch_xds["wind_speed"] = wind_speed
+    if (
+        C.WIND_U_SURFACE_NAME in filtered_batch_xds
+        and C.WIND_V_SURFACE_NAME in filtered_batch_xds
+    ):
+        wind_speed = np.sqrt(
+            filtered_batch_xds[C.WIND_U_SURFACE_NAME] ** 2
+            + filtered_batch_xds[C.WIND_V_SURFACE_NAME] ** 2
+        )
+        filtered_batch_xds["10m_wind_speed"] = wind_speed
+
+    return filtered_batch_xds
+
+
+def parse_filters(var_filter_str, level_filter_str, C):
+    """
+    Parse and check correctness of variable and level filters given as strings.
+    """
+    # Variable filter
+    if var_filter_str is None:
+        var_list = None
+    else:
+        # String to list
+        var_list_short = [
+            var_str.strip() for var_str in var_filter_str.split(",")
+        ]
+
+        # Check that all variables are forecasted
+        for var_str in var_list_short:
+            assert (
+                var_str in C.ATMOSPHERIC_PARAMS_SHORT
+                or var_str in C.SURFACE_PARAMS_SHORT
+            ), f"Can not save unknown variable: {var_str}"
+
+        param_name_lookup = dict(
+            zip(C.SURFACE_PARAMS_SHORT, C.SURFACE_PARAMS)
+        ) | dict(zip(C.ATMOSPHERIC_PARAMS_SHORT, C.ATMOSPHERIC_PARAMS))
+        var_list = [
+            param_name_lookup[short_name] for short_name in var_list_short
+        ]
+
+    # Level filter
+    if level_filter_str is None:
+        level_list = None
+    else:
+        level_list = [
+            int(level_str.strip()) for level_str in level_filter_str.split(",")
+        ]
+        for level in level_list:
+            assert (
+                level in C.PRESSURE_LEVELS
+            ), f"Can not save unknown pressure level: {level}"
+
+    return var_list, level_list
+
+
+def filter_xdataset(xds, var_filter_list, level_filter_list):
+    """
+    Filter out selected variables and levels from xarray.Dataset
+    """
+    if var_filter_list is not None:
+        xds = xds[var_filter_list]
+
+    if level_filter_list is not None:
+        # Need nearest method to keep surface variables
+        xds = xds.sel(level=level_filter_list, method="nearest")
+
+    return xds
+
+
+@torch.no_grad()
+def forecast_to_xarr(
+    model,
+    dataloader,
+    name,
+    device_name,
+    var_filter=None,
+    level_filter=None,
+    ens_size=5,
+    dataset_type="era5",
+):
+    """
+    Produce forecasts for each sample in the data_loader, using model
+
+    model: model to produce forecasts with
+    dataloader: non-shuffling dataloader for evaluation set
+    name: name to save zarr as (without .zarr)
+    device_name: name of device to use for forecasting
+    var_filter: string, comma-separated list of variables to save,
+        or None to save all
+    """
+    C = get_constants(dataset_type)
+
+    # Parse var_filter
+    var_filter_list, level_filter_list = parse_filters(
+        var_filter, level_filter, C
+    )
+
+    # Set up device, need to handle manually here
+    device = torch.device(device_name)
+    model = model.to(device)
+
+    # Set up save path
+    os.makedirs(FC_DIR_PATH, exist_ok=True)
+    fc_path = os.path.join(FC_DIR_PATH, f"{name}.zarr")
+
+    # Get coordinates from array used in dataset
+    dataset = dataloader.dataset
+    data_mean = dataset.data_mean.to(device)
+    data_std = dataset.data_std.to(device)
+    ds_xda = dataset.atm_xda
+
+    t_0 = ds_xda.coords["time"].values[0]
+
+    # Set up xarray with zarr backend
+    pred_hours = 6 * (np.arange(dataset.pred_length) + 1)
+
+    # TODO choose type dynamically based on type of t_0
+    # pred_timedeltas = [
+    #     np.timedelta64(dh, "h").astype("timedelta64[ns]") for dh in pred_hours
+    # ]
+    # -------------------
+    if isinstance(t_0, (cftime.Datetime360Day, cftime.DatetimeNoLeap)):
+        # CFTime calendars → use datetime.timedelta
+        print(print("Using Datetime360Day fix"))
+        pred_timedeltas = [dt_timedelta(hours=int(dh)) for dh in pred_hours]
+    else:
+        # Normal Gregorian timestamps → use numpy timedelta64
+        pred_timedeltas = np.array(
+            [np.timedelta64(int(dh), "h") for dh in pred_hours]
+        )
+    # -------------------
+
+    # Figure out if we should do ensemble forecasting
+    save_ensemble = isinstance(model, GraphEFM)
+
+    # Set up dimensions for dataset
+    atm_dims, sur_dims = get_var_dims(save_ensemble)
+    atm_empty_shape = (
+        0,
+        dataset.pred_length,
+        *C.GRID_SHAPE,
+        len(C.PRESSURE_LEVELS),
+    )
+    sur_empty_shape = (
+        0,
+        dataset.pred_length,
+        *C.GRID_SHAPE,
+    )
+
+    # TODO choose type dynamically based on type of t_0
+    # ds_coords = {
+    #     "time": np.array([], dtype="datetime64[ns]"),
+    #     "prediction_timedelta": pred_timedeltas,
+    #     "longitude": ds_xda.coords["longitude"].values,
+    #     "latitude": ds_xda.coords["latitude"].values,
+    #     "level": ds_xda.coords["level"].values,
+    # }
+    # ------------------
+    # if isinstance(t_0, (cftime.Datetime360Day, cftime.DatetimeNoLeap)):
+    #     print('Using Datetime360Day fix')
+    #     time_coord = np.array([], dtype=object)  # CFTime objects → dtype=object
+    # else:
+    #     time_coord = np.array([], dtype="datetime64[h]")  # or "datetime64[ns]" if you prefer
+    time_coord = np.array([], ds_xda.time.encoding["dtype"])
+
+    ds_coords = {
+        "time": time_coord,
+        "prediction_timedelta": pred_timedeltas,
+        "longitude": ds_xda.coords["longitude"].values,
+        "latitude": ds_xda.coords["latitude"].values,
+        "level": ds_xda.coords["level"].values,
+    }
+    # ------------------
+
+    if save_ensemble:
+        # Add on realization (ens. member) dim.
+        atm_empty_shape = (ens_size,) + atm_empty_shape
+        sur_empty_shape = (ens_size,) + sur_empty_shape
+        ds_coords["realization"] = np.arange(ens_size)
+
+    forecast_xds = xa.Dataset(
+        {
+            var_name: (
+                atm_dims,
+                np.zeros(atm_empty_shape),
+            )
+            for var_name in C.ATMOSPHERIC_PARAMS
+        }
+        | {  # Dict union
+            var_name: (
+                sur_dims,
+                np.zeros(sur_empty_shape),
+            )
+            for var_name in C.SURFACE_PARAMS
+        },
+        coords=ds_coords,
+    )
+
+    # FIX, REMOVED this code to support 360Day years
+    # forecast_xds["prediction_timedelta"].encoding["dtype"] = "timedelta64[ns]"
+    # # Need to set this encoding to save/load correct times from disk
+    # time_enc_unit = "nanoseconds since 1970-01-01"
+    # forecast_xds.time.encoding["units"] = time_enc_unit
+
+    forecast_xds["prediction_timedelta"].encoding["dtype"] = "timedelta64[h]"
+    # if isinstance(t_0, (cftime.Datetime360Day, cftime.DatetimeNoLeap)):
+    #     time_enc_unit = "days since 1850-01-01"
+    # else:
+    #     time_enc_unit = "hours since 1970-01-01 00:00:00"
+    time_enc_unit = ds_xda.time.encoding["units"]
+
+    forecast_xds.time.encoding["units"] = time_enc_unit
+    forecast_xds.time.encoding["dtype"] = ds_xda.time.encoding["dtype"]
+    forecast_xds.time.encoding["calendar"] = ds_xda.time.encoding["calendar"]
+
+    # Filter to selected
+    filtered_xds = filter_xdataset(
+        forecast_xds, var_filter_list, level_filter_list
+    )
+
+    print(f"Looking for wind variables {C.WIND_U_NAME} and {C.WIND_V_NAME}")
+    print(
+        f"Looking for surface wind variables {C.WIND_U_SURFACE_NAME} and {C.WIND_V_SURFACE_NAME}"
+    )
+    # Set up wind variables
+    if C.WIND_U_NAME in filtered_xds and C.WIND_V_NAME in filtered_xds:
+        # Use same empty shape
+        filtered_xds["wind_speed"] = filtered_xds[C.WIND_U_NAME]
+    if (
+        C.WIND_U_SURFACE_NAME in filtered_xds
+        and C.WIND_V_SURFACE_NAME in filtered_xds
+    ):
+        # Use same empty shape
+        filtered_xds["10m_wind_speed"] = filtered_xds[C.WIND_U_SURFACE_NAME]
+
+    # Set up chunking
+    atm_chunking = (1, -1, -1, -1, -1)
+    sur_chunking = (1, -1, -1, -1)
+    if save_ensemble:
+        # All members in same chunk
+        atm_chunking = (-1,) + atm_chunking
+        sur_chunking = (-1,) + sur_chunking
+
+    chunk_encoding = dict(  # pylint: disable=consider-using-dict-comprehension
+        [
+            (
+                (v, {"chunks": atm_chunking})
+                if v in C.ATMOSPHERIC_PARAMS + ["wind_speed"]
+                else (v, {"chunks": sur_chunking})
+            )
+            for v in filtered_xds
+        ]
+    )
+
+    print(filtered_xds.time.encoding)
+    # Overwrite if exists
+    filtered_xds.to_zarr(fc_path, mode="w", encoding=chunk_encoding)
+    print(filtered_xds)
+
+    # Compute all init times
+    start_init_time = ds_xda.coords["time"].values[1]
+
+    ### Applied fix for 360Day Calendars ~
+    if isinstance(
+        start_init_time, (cftime.DatetimeNoLeap, cftime.Datetime360Day)
+    ):
+        step = dt_timedelta(hours=12)
+        init_times = [start_init_time + i * step for i in range(len(dataset))]
+    else:
+        delta_hours = np.timedelta64(len(dataset) * 12, "h")
+        step = np.timedelta64(12, "h")
+        init_times = np.arange(
+            start_init_time, start_init_time + delta_hours, step
+        ).astype("datetime64[ns]")
+    ### End of fix
+
+    first = True
+
+    # Iterate over dataset and produce forecasts
+    for batch in tqdm(dataloader):
+        # Send to device
+        batch = tuple(t.to(device) for t in batch)
+
+        # Forecast
+        if save_ensemble:
+            init_states, target_states, forcing_features = batch
+
+            batch_forecast, _ = model.sample_trajectories(
+                init_states,
+                forcing_features,
+                target_states,
+                ens_size,
+            )
+            # (B, S, pred_steps, num_grid_nodes, d_f)
+        else:
+            batch_forecast, _, _ = model.common_step(batch)
+
+        # Rescale to original data scaling
+        batch_forecast_rescaled = batch_forecast * data_std + data_mean
+        # (B, (S), pred_steps, num_grid_nodes, d_f)
+
+        # Get init times for batch
+        batch_size = batch_forecast.shape[0]
+        batch_init_times = init_times[:batch_size]
+        init_times = init_times[batch_size:]  # Drop used times
+
+        batch_xds = forecast_to_xds(
+            batch_forecast_rescaled,
+            batch_init_times,
+            forecast_xds.coords.items(),
+            var_filter_list,
+            level_filter_list,
+            time_enc_unit,
+            C,
+        )
+
+        if isinstance(t_0, (cftime.Datetime360Day, cftime.DatetimeNoLeap)):
+            batch_xds.time.encoding.update(
+                {"dtype": ds_xda.time.encoding["dtype"]}
+            )
+        # print(batch_xds.time.encoding)
+        # print(ds_xda.time.encoding)
+
+        # Save to existing zarr using append_dim="time"
+        if first:
+            batch_xds.to_zarr(fc_path, mode="w")
+            first = False
+        batch_xds.to_zarr(fc_path, append_dim="time")

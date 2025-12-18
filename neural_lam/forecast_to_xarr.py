@@ -221,8 +221,13 @@ def forecast_to_xarr(
     )
 
     # Set up device, need to handle manually here
-    device = torch.device(device_name)
-    model = model.to(device)
+    
+    print(name)
+    if not 'persistence' in name:
+        device = torch.device(device_name)
+        model = model.to(device)
+    else:
+        print('not using gpu for persistence')
 
     # Set up save path
     os.makedirs(FC_DIR_PATH, exist_ok=True)
@@ -230,8 +235,12 @@ def forecast_to_xarr(
 
     # Get coordinates from array used in dataset
     dataset = dataloader.dataset
-    data_mean = dataset.data_mean.to(device)
-    data_std = dataset.data_std.to(device)
+    if not 'persistence' in name:
+        data_mean = dataset.data_mean.to(device)
+        data_std = dataset.data_std.to(device)
+    else:
+        data_mean = dataset.data_mean
+        data_std = dataset.data_std
     ds_xda = dataset.atm_xda
 
     # Set up xarray with zarr backend
@@ -345,7 +354,10 @@ def forecast_to_xarr(
     # Iterate over dataset and produce forecasts
     for batch in tqdm(dataloader):
         # Send to device
-        batch = tuple(t.to(device) for t in batch)
+        if not 'persistence' in name:
+            batch = tuple(t.to(device) for t in batch)
+        else:
+            batch = tuple(t for t in batch)
 
         # Forecast
         if save_ensemble:

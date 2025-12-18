@@ -11,8 +11,8 @@ sys.path.insert(
 
 import neural_lam.constants as c
 
-models = utils.PAST_MODELS  # + future_models
-future_models = utils.FUTURE_MODELS
+models = utils.PAST_MODELS_NG_era5  # + future_models
+future_models = utils.FUTURE_MODELS_NG_era5
 
 for model in models:
     for run in [1, 2, 3]:

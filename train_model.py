@@ -18,6 +18,9 @@ from neural_lam.configs import get_constants
 from neural_lam.era5_dataset import ERA5Dataset
 from neural_lam.era5_dataset_persistence import ERA5PersistenceDataset
 from neural_lam.forecast_to_xarr import forecast_to_xarr
+from neural_lam.forecast_to_xarr_ukesm import (
+    forecast_to_xarr as forecast_to_xarr_ukesm,
+)
 from neural_lam.models.graph_efm import GraphEFM
 from neural_lam.models.graph_fm import GraphFM
 from neural_lam.models.graphcast import GraphCast
@@ -197,6 +200,12 @@ def main():
         help="If PropagationNets should be used for all vertical message "
         "passing (g2m, m2g, up in hierarchy), in deterministic models."
         "(default: 0 (no))",
+    )
+    parser.add_argument(
+        "--forecast_save_name",
+        type=str,
+        default='',
+        help="Addition to the save name of the forecast folder",
     )
 
     # Training options
@@ -483,7 +492,9 @@ def main():
     # used at all in producing the loss. This is desired, but DDP complains.
     strategy = "ddp" if args.kl_beta > 0 else "ddp_find_unused_parameters_true"
     num_devices = (
-        1 if current_run == RUN_TYPE.TEST else torch.cuda.device_count()
+        1
+        if current_run == RUN_TYPE.TEST and not args.batch_size == 1
+        else torch.cuda.device_count()
     )
     print(f"Starting with {num_devices} devices")
 
@@ -537,23 +548,35 @@ def main():
         print(f"Running evaluation on {args.eval}")
 
         if args.save_forecasts:
-            assert args.load, "Need to load a model to save forecasts from"
+            # assert args.load, "Need to load a model to save forecasts from"
             fc_save_name = os.path.join(
                 args.dataset_path,
                 args.dataset + "_forecasts",
-                f"z{args.hidden_dim}_{args.model}",
+                f"z{args.hidden_dim}_{args.model}{args.forecast_save_name}",
             )
             print(f"Saving eval forecasts to zarr: {fc_save_name}")
-            forecast_to_xarr(
-                model,
-                eval_loader,
-                fc_save_name,
-                device_name,
-                var_filter=args.save_vars,
-                level_filter=args.save_levels,
-                ens_size=args.ensemble_size,
-                dataset_type=args.dataset_type,
-            )
+            if args.dataset_type == "ukesm":
+                forecast_to_xarr_ukesm(
+                    model,
+                    eval_loader,
+                    fc_save_name,
+                    device_name,
+                    var_filter=args.save_vars,
+                    level_filter=args.save_levels,
+                    ens_size=args.ensemble_size,
+                    dataset_type=args.dataset_type,
+                )
+            else:
+                forecast_to_xarr(
+                    model,
+                    eval_loader,
+                    fc_save_name,
+                    device_name,
+                    var_filter=args.save_vars,
+                    level_filter=args.save_levels,
+                    ens_size=args.ensemble_size,
+                    dataset_type=args.dataset_type,
+                )
             print("Forecasts saved")
         else:
             trainer.test(model=model, dataloaders=eval_loader)

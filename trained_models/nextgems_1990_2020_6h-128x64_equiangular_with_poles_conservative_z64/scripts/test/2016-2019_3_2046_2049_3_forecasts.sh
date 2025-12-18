@@ -1,9 +1,9 @@
 #!/bin/bash -x
 #SBATCH --nodes=1
-#SBATCH --time=01:00:00
+#SBATCH --time=05:00:00
 #SBATCH --gres=gpu:1
-#SBATCH --partition=dev_accelerated
-#SBATCH --ntasks-per-node=4
+#SBATCH --partition=accelerated
+#SBATCH --ntasks-per-node=1
 #SBATCH --mem=250gb
 #SBATCH --mail-type="END"
 #SBATCH --mail-user="xo8179@partner.kit.edu"
@@ -27,9 +27,11 @@ echo "==========================="
 name=nextgems_1990_2020_6h-128x64_equiangular_with_poles_conservative
 name_full=${name}_z64
 
+
 dataset_path=$(ws_find neural_lam)/data/data
 dataset_historical_name=global_${name}_test_only
 dataset_future_name=global_nextgems_2046_2049_equiangular_with_poles_conservative
+
 
 cd /home/hk-project-pai00005/xo8179/neural_lam_fork/neural-lam
 source venv/bin/activate
@@ -37,44 +39,89 @@ echo "Activated python"
 ml devel/cuda/11.8
 echo "Loaded Cuda"
 
+batch_size=32
+hidden_dim=64
+dataset_type=nextgems
+graph_name=global_multilevel_nextgems_withpoles_conservative
 
 
-
-# Eval checkpoint 3 WITH forecasts    
-srun python train_model.py\
-    --name ${name_full}_test_03_forecasts_long\
+srun -n1 python -u train_model.py\
+    --name ${name_full}_test_persistence_forecasts_full\
     --dataset ${dataset_historical_name}\
     --dataset_path ${dataset_path}\
+    --dataset_type ${dataset_type}\
+    --model persistence\
+    --n_example_pred 0\
+    --eval_leads 40\
+    --hidden_dim ${hidden_dim}\
+    --processor_layers 4\
+    --batch_size ${batch_size}\
+    --graph ${graph_name}\
+    --periods "train:1990-01-01,2015-12-31;val:2016-01-01,2017-12-31;test:2016-01-01,2019-12-31"\
+    --wandb_output trained_models/${name_full}/test_runs/wandb_test_persistence_forecasts_full\
+    --eval test\
+    --save_forecasts 1\
+    --save_levels 50,100,150,200,250,300,400,500,600,700,850,925,1000
+    
+
+# Eval checkpoint 3 WITH forecasts    
+srun -n1 python -u train_model.py\
+    --name ${name_full}_test_03_forecasts_full\
+    --dataset ${dataset_historical_name}\
+    --dataset_path ${dataset_path}\
+    --dataset_type ${dataset_type}\
     --model graphcast\
     --n_example_pred 0\
     --eval_leads 40\
-    --hidden_dim 64\
+    --hidden_dim ${hidden_dim}\
     --processor_layers 4\
-    --batch_size 8\
-    --graph global_multilevel_nextgems_withpoles_conservative\
+    --batch_size ${batch_size}\
+    --graph ${graph_name}\
     --load trained_models/${name_full}/checkpoints/checkpoint_03/last.ckpt\
     --periods "train:1990-01-01,2015-12-31;val:2016-01-01,2017-12-31;test:2016-01-01,2019-12-31"\
-    --wandb_output trained_models/${name_full}/test_runs/wandb_test_03_forecasts_long\
+    --wandb_output trained_models/${name_full}/test_runs/wandb_test_03_forecasts_full\
     --save_forecasts 1\
-    --save_levels 500,700,850\
+    --save_levels 50,100,150,200,250,300,400,500,600,700,850,925,1000\
     --eval test
 
+
+
+
 # Eval checkpoint 3 WITH forecasts, on 2049
-srun python train_model.py\
-    --name ${name_full}_test_03_2049_forecasts_long\
+srun -n1 python -u train_model.py\
+    --name ${name_full}_test_03_2049_forecasts_full\
     --dataset ${dataset_future_name}\
     --dataset_path ${dataset_path}\
+    --dataset_type ${dataset_type}\
     --model graphcast\
     --n_example_pred 0\
     --eval_leads 40\
-    --hidden_dim 64\
+    --hidden_dim ${hidden_dim}\
     --processor_layers 4\
-    --batch_size 8\
-    --graph global_multilevel_nextgems_withpoles_conservative\
+    --batch_size ${batch_size}\
+    --graph ${graph_name}\
     --load trained_models/${name_full}/checkpoints/checkpoint_03/last.ckpt\
     --periods "train:2046-01-01,2049-12-31;val:2046-01-01,2049-12-31;test:2046-01-01,2049-12-31"\
-    --wandb_output trained_models/${name_full}/test_runs/wandb_test_03_2049_forecasts_long\
+    --wandb_output trained_models/${name_full}/test_runs/wandb_test_03_2049_forecasts_full\
     --save_forecasts 1\
-    --save_levels 500,700,850\
+    --save_levels 50,100,150,200,250,300,400,500,600,700,850,925,1000\
     --eval test
 
+
+srun -n1 python -u train_model.py\
+    --name ${name_full}_test_persistence_2049_forecasts_full\
+    --dataset ${dataset_future_name}\
+    --dataset_path ${dataset_path}\
+    --dataset_type ${dataset_type}\
+    --model persistence\
+    --n_example_pred 0\
+    --eval_leads 40\
+    --hidden_dim ${hidden_dim}\
+    --processor_layers 4\
+    --batch_size ${batch_size}\
+    --graph ${graph_name}\
+    --periods "train:2046-01-01,2049-12-31;val:2046-01-01,2049-12-31;test:2046-01-01,2049-12-31"\
+    --wandb_output trained_models/${name_full}/test_runs/wandb_test_persistence_2049_forecasts_full\
+    --eval test\
+    --save_forecasts 1\
+    --save_levels 50,100,150,200,250,300,400,500,600,700,850,925,1000

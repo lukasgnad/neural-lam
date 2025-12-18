@@ -22,7 +22,8 @@ echo "Tasks per node:   $SLURM_NTASKS_PER_NODE"
 echo "Memory per Node:  $SLURM_MEM_PER_NODE"
 echo "==========================="
 
-dataset=global_1985_2014_equiangular_wp_conservative_40_chunks
+# dataset=global_1985_2014_equiangular_wp_conservative_40_chunks
+dataset=global_1985_2014_equiangular_wp_conservative_40_chunks_holes_filled
 dataset_path=/hkfs/work/workspace/scratch/xo8179-ukesm/
 
 periods="train:1985-01-01,2010-12-30;val:2011-01-01,2012-12-30;test:2011-01-01,2014-12-30"

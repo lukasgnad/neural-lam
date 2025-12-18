@@ -31,3 +31,4 @@ sshpass -p 'e,%R.T.fo:,tX1x<{X(w' scp b383582@levante.dkrz.de:/scratch/b/b383582
 echo 'Copied 2D var successfully'
 sshpass -p 'e,%R.T.fo:,tX1x<{X(w' scp b383582@levante.dkrz.de:/scratch/b/b383582/nextgems/2D_nextgems_2046_2049_tp_6hourly_0.25deg.nc 2D_nextgems_2046_2049_tp_6hourly_0.25deg.nc
 echo 'Copied TP successfully'
+

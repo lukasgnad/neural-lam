@@ -13,10 +13,17 @@ out/
 
 **/test_runs/*
 **/train_runs/*
+**/extrapolation_future.zarr/*
+**/distributions/*
+**/rmse_r2_final/*
+**/rmse_r2_values_interpolated/*
 
+**/depr/*
+**/deprecated/*
 **/out/*
 **/logs/*
 **/plots/*
+**/plots_interpolated/*
 **/checkpoints/*
 
 ### Python ###

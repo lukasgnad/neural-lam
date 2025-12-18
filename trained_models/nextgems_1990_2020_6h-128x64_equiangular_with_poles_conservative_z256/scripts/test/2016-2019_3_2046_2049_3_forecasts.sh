@@ -1,9 +1,9 @@
 #!/bin/bash -x
 #SBATCH --nodes=1
-#SBATCH --time=03:30:00
+#SBATCH --time=10:30:00
 #SBATCH --gres=gpu:1
 #SBATCH --partition=accelerated
-#SBATCH --ntasks-per-node=4
+#SBATCH --ntasks-per-node=1
 #SBATCH --mem=250gb
 #SBATCH --mail-type="END"
 #SBATCH --mail-user="xo8179@partner.kit.edu"
@@ -38,43 +38,49 @@ ml devel/cuda/11.8
 echo "Loaded Cuda"
 
 
+batch_size=8
+hidden_dim=256
+dataset_type=nextgems
+graph_name=global_multilevel_nextgems_withpoles_conservative
 
 
 # Eval checkpoint 3 WITH forecasts    
-# srun python train_model.py\
-#     --name ${name_full}_test_03_forecasts_long\
-#     --dataset ${dataset_historical_name}\
-#     --dataset_path ${dataset_path}\
-#     --model graphcast\
-#     --n_example_pred 0\
-#     --eval_leads 40\
-#     --hidden_dim 256\
-#     --processor_layers 4\
-#     --batch_size 8\
-#     --graph global_multilevel_nextgems_withpoles_conservative\
-#     --load trained_models/${name_full}/checkpoints/checkpoint_03/last.ckpt\
-#     --periods "train:1990-01-01,2015-12-31;val:2016-01-01,2017-12-31;test:2016-01-01,2019-12-31"\
-#     --wandb_output trained_models/${name_full}/test_runs/wandb_test_03_forecasts_long\
-#     --save_forecasts 1\
-#     --save_levels 500,700,850\
-#     --eval test
-
-# Eval checkpoint 3 WITH forecasts, on 2049
-srun python train_model.py\
-    --name ${name_full}_test_03_2049_forecasts_long\
-    --dataset ${dataset_future_name}\
+srun -n1 python -u train_model.py\
+    --name ${name_full}_test_03_forecasts_full\
+    --dataset ${dataset_historical_name}\
     --dataset_path ${dataset_path}\
+    --dataset_type ${dataset_type}\
     --model graphcast\
     --n_example_pred 0\
     --eval_leads 40\
-    --hidden_dim 256\
+    --hidden_dim ${hidden_dim}\
     --processor_layers 4\
-    --batch_size 8\
-    --graph global_multilevel_nextgems_withpoles_conservative\
+    --batch_size ${batch_size}\
+    --graph ${graph_name}\
+    --load trained_models/${name_full}/checkpoints/checkpoint_03/last.ckpt\
+    --periods "train:1990-01-01,2015-12-31;val:2016-01-01,2017-12-31;test:2016-01-01,2019-12-31"\
+    --wandb_output trained_models/${name_full}/test_runs/wandb_test_03_forecasts_full\
+    --save_forecasts 1\
+    --save_levels 50,100,150,200,250,300,400,500,600,700,850,925,1000\
+    --eval test
+
+# Eval checkpoint 3 WITH forecasts, on 2049
+srun -n1 python -u train_model.py\
+    --name ${name_full}_test_03_2049_forecasts_full\
+    --dataset ${dataset_future_name}\
+    --dataset_path ${dataset_path}\
+    --dataset_type ${dataset_type}\
+    --model graphcast\
+    --n_example_pred 0\
+    --eval_leads 40\
+    --hidden_dim ${hidden_dim}\
+    --processor_layers 4\
+    --batch_size ${batch_size}\
+    --graph ${graph_name}\
     --load trained_models/${name_full}/checkpoints/checkpoint_03/last.ckpt\
     --periods "train:2046-01-01,2049-12-31;val:2046-01-01,2049-12-31;test:2046-01-01,2049-12-31"\
-    --wandb_output trained_models/${name_full}/test_runs/wandb_test_03_2049_forecasts_long\
+    --wandb_output trained_models/${name_full}/test_runs/wandb_test_03_2049_forecasts_full\
     --save_forecasts 1\
-    --save_levels 500,700,850\
+    --save_levels 50,100,150,200,250,300,400,500,600,700,850,925,1000\
     --eval test
 

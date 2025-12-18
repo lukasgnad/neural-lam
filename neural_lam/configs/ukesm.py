@@ -30,6 +30,12 @@ class UKESMConfig(BaseConfig):
         "surface_u_component_of_wind",
         "surface_v_component_of_wind",
     ]
+
+    WIND_U_NAME = "u_component_of_wind"
+    WIND_V_NAME = "v_component_of_wind"
+    WIND_U_SURFACE_NAME = "surface_u_component_of_wind"
+    WIND_V_SURFACE_NAME = "surface_v_component_of_wind"
+
     SURFACE_PARAMS_SHORT = ["msl", "z500", "tp", "t_surf", "u_surf", "v_surf"]
     SURFACE_PARAM_UNITS = ["Pa", "m²/s²", "kg/m²", "K", "m/s", "m/s"]
 
