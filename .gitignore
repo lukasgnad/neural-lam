@@ -92,3 +92,5 @@ tags
 
 # Coc configuration directory
 .vim
+evaluation/exceeding_ukesm.pkl
+eval_ukesm/exceeding_ukesm.pkl
