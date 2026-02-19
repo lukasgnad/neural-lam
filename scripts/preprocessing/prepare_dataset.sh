@@ -24,13 +24,14 @@ echo "Memory per Node:  $SLURM_MEM_PER_NODE"
 echo "==========================="
 
 # dataset=global_era5_1980_2022_6h-128x64_equiangular_with_poles_conservative
-dataset=global_nextgems_2046_2049_equiangular_with_poles_conservative
-dataset_path=/hkfs/work/workspace/scratch/xo8179-neural_lam/data/data/
+# dataset=global_nextgems_2046_2049_equiangular_with_poles_conservative
+dataset=global_nextgems_minimal_1990_2020_6h-128x64_equiangular_with_poles_conservative
+dataset_path=/hkfs/work/workspace/scratch/xo8179-NG_new/
 
-# periods="train:1980-01-01,2016-12-31;val:2017-01-01,2019-12-31;test:2020-01-01,2022-12-31"
+# periods="train:1990-01-01,2015-12-31;val:2016-01-01,2017-12-31;test:2018-01-01,2019-12-31"
 periods="train:2046-01-01,2049-12-31;val:2046-01-01,2049-12-31;test:2046-01-01,2049-12-31"
 
-graph_name="global_multilevel_1980_2022"
+graph_name="global_multilevel_nextgems_withpoles_conservative"
 
 cd /home/hk-project-pai00005/xo8179/neural_lam_fork/neural-lam
 source venv/bin/activate
@@ -50,12 +51,14 @@ python create_global_grid_features.py \
     --dataset ${dataset} \
     --dataset_path ${dataset_path}
 
-python create_global_forcing.py \
+python create_global_forcing_stable.py \
     --dataset ${dataset} \
-    --dataset_path ${dataset_path}
+    --dataset_path ${dataset_path} \
+    --dataset_type nextgems
 
 python create_parameter_weights.py \
     --dataset ${dataset} \
     --dataset_path ${dataset_path} \
     --periods ${periods} \
-    --n_workers 8
+    --n_workers 16 \
+    --dataset_type nextgems_minimal

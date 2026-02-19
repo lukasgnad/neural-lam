@@ -12,7 +12,7 @@ from tqdm import tqdm
 # First-party
 from neural_lam.era5_dataset import ERA5Dataset
 from neural_lam.weather_dataset import WeatherDataset
-from neural_lam.configs import get_constants  # type: ignore
+from neural_lam.configs import get_constants, POSSIBLE_DATASET_TYPES  # type: ignore
 
 DEFAULT_DATASET = "meps_example"
 DEFAULT_BATCH_SIZE = 32
@@ -277,11 +277,7 @@ def main():
     args = parser.parse_args()
 
     # Asserts for arguments
-    assert args.dataset_type in (
-        "era5",
-        "nextgems",
-        "ukesm",
-    ), f"Unknown dataset type: {args.dataset_type}"
+    assert args.dataset_type in POSSIBLE_DATASET_TYPES.keys(), f"Unknown dataset type: {args.dataset_type}"
 
     create_parameter_weights(
         dataset=args.dataset,

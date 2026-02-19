@@ -3,7 +3,7 @@ import numpy as np
 from .base import BaseConfig
 
 
-class ERA5_NextGEMSConfig(BaseConfig):
+class ERA5_NextGEMSConfigMinimal(BaseConfig):
     """Configuration for NextGEMS dataset."""
 
     VAL_STEP_LOG_ERRORS = np.array([1, 2, 5, 10, 20, 40])
@@ -29,7 +29,7 @@ class ERA5_NextGEMSConfig(BaseConfig):
         "mean_sea_level_pressure",
         "total_precipitation_6hr",
     ]
-    SURFACE_PARAMS_SHORT = ["z", "2t", "10u", "10v", "msl", "tp"]
+    SURFACE_PARAMS_SHORT = ["z500", "2t", "10u", "10v", "msl", "tp"]
     SURFACE_PARAM_UNITS = ["m²/s²", "K", "m/s", "m/s", "Pa", "m"]
 
     PREPROCESSING_PARAMS = ["geopotential_at_surface", "land_sea_mask"]
@@ -47,15 +47,14 @@ class ERA5_NextGEMSConfig(BaseConfig):
         assert self.GRID_STATE_DIM == 36
 
         self.VAR_LEADS_METRICS_WATCH = {
-            self._get_var_index("z", 500): [1, 10],
+            self._get_var_index("z500"): [1, 10],
             self._get_var_index("2t"): [1, 10],
             self._get_var_index("10u"): [1, 10],
         }
 
         self.VAL_PLOT_VARS = {
-            self._get_var_index("z", 500): np.array([2, 20]),  
-            self._get_var_index("q", 700): np.array([2, 20]),  
-            self._get_var_index("z", 850): np.array([2, 20]), 
+            self._get_var_index("z500"): np.array([2, 20]),  
+            self._get_var_index("q", 700): np.array([2, 20]), 
             self._get_var_index("2t"): np.array([2, 20]),  
             self._get_var_index("10u"): np.array([2, 20]),
             self._get_var_index("10v"): np.array([2, 20]), 
