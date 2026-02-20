@@ -97,6 +97,12 @@ class ERA5Dataset(torch.utils.data.Dataset):
         forcing_xda = xa.open_dataarray(forcing_path, engine="zarr")
         # each with dims (num_time, num_lon, num_lat)
 
+        vars_to_keep = set(C.ATMOSPHERIC_PARAMS) | set(C.SURFACE_PARAMS) | set(C.PREPROCESSING_PARAMS)
+        vars_to_keep = [v for v in vars_to_keep if v in fields_xds.data_vars]
+        fields_xds = fields_xds[vars_to_keep]
+
+        fields_xds = fields_xds.sel(level=C.PRESSURE_LEVELS)
+
         # FIX for UKESM 360day years
         use_cftime = not np.issubdtype(fields_xds.time.dtype, np.datetime64)
         split_slices = parse_periods(periods, use_cftime=use_cftime)

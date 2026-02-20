@@ -14,7 +14,7 @@ import os
 
 # First-party
 from neural_lam import utils
-from neural_lam.configs import get_constants
+from neural_lam.configs import POSSIBLE_DATASET_TYPES, get_constants
 from neural_lam.era5_dataset import ERA5Dataset
 from neural_lam.era5_dataset_persistence import ERA5PersistenceDataset
 from neural_lam.forecast_to_xarr import forecast_to_xarr
@@ -348,11 +348,7 @@ def main():
     args = parser.parse_args()
 
     # Asserts for arguments
-    assert args.dataset_type in (
-        "era5",
-        "nextgems",
-        "ukesm",
-    ), f"Unknown dataset type: {args.dataset_type}"
+    assert args.dataset_type in POSSIBLE_DATASET_TYPES.keys(), f"Unknown dataset type: {args.dataset_type}"
 
     C = get_constants(args.dataset_type)
 
