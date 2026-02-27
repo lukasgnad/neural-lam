@@ -3,7 +3,7 @@ import numpy as np
 from .base import BaseConfig
 
 
-class UKESMConfig(BaseConfig):
+class UKESMConfigMinimal(BaseConfig):
     """Configuration for UKESM dataset."""
 
     VAL_STEP_LOG_ERRORS = np.array([1, 2, 5, 10, 20, 40])

@@ -1,6 +1,7 @@
 from .ukesm import UKESMConfig
 from .era5_nextgems import ERA5_NextGEMSConfig
 from .era5_nextgems_minimal import ERA5_NextGEMSConfigMinimal
+from .ukesm_minimal import UKESMConfigMinimal
 
 def get_constants(dataset_name: str):
     dataset_name = dataset_name.lower()
@@ -19,6 +20,7 @@ def get_constants(dataset_name: str):
 
 
 POSSIBLE_DATASET_TYPES = {"ukesm": UKESMConfig(),
+                          "ukesm_minimal": UKESMConfigMinimal(),
                           "nextgems_minimal":ERA5_NextGEMSConfigMinimal(),
                           "era5_minimal":ERA5_NextGEMSConfigMinimal(),
                           "nextgems":ERA5_NextGEMSConfig(),

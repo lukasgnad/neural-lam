@@ -25,11 +25,15 @@ echo "==========================="
 
 # dataset=global_era5_1980_2022_6h-128x64_equiangular_with_poles_conservative
 # dataset=global_nextgems_2046_2049_equiangular_with_poles_conservative
-dataset=global_nextgems_minimal_1990_2020_6h-128x64_equiangular_with_poles_conservative
-dataset_path=/hkfs/work/workspace/scratch/xo8179-NG_new/
+# dataset=global_nextgems_minimal_1990_2020_6h-128x64_equiangular_with_poles_conservative
+# dataset_path=/hkfs/work/workspace/scratch/xo8179-NG_new/
+
+dataset=global_1985_2014_equiangular_wp_conservative_40_chunks_holes_filled
+dataset_path=/hkfs/work/workspace/scratch/xo8179-ukesm/
 
 # periods="train:1990-01-01,2015-12-31;val:2016-01-01,2017-12-31;test:2018-01-01,2019-12-31"
-periods="train:2046-01-01,2049-12-31;val:2046-01-01,2049-12-31;test:2046-01-01,2049-12-31"
+#periods="train:2046-01-01,2049-12-31;val:2046-01-01,2049-12-31;test:2046-01-01,2049-12-31"
+periods="train:1985-01-01,2010-12-30;val:2011-01-01,2012-12-30;test:2013-01-01,2014-12-30"
 
 graph_name="global_multilevel_nextgems_withpoles_conservative"
 
@@ -60,5 +64,5 @@ python create_parameter_weights.py \
     --dataset ${dataset} \
     --dataset_path ${dataset_path} \
     --periods ${periods} \
-    --n_workers 16 \
-    --dataset_type nextgems_minimal
+    --n_workers 10 \
+    --dataset_type ukesm_minimal
